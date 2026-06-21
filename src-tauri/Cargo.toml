@@ -1,0 +1,23 @@
+[package]
+name = "fluxsai"
+version = "0.1.0"
+description = "TrinityCore SmartAI / Smart Script Editor"
+authors = ["FluxSAI"]
+edition = "2021"
+
+[lib]
+name = "fluxsai_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", features = ["mysql", "runtime-tokio"] }
+tokio = { version = "1", features = ["full"] }
