@@ -18,6 +18,24 @@
   let message = $state('');
   let success = $state(false);
 
+  const DB_CONFIG_KEY = 'fluxsai_db_config';
+
+  function loadSavedConfig(): DbConfig {
+    try {
+      const raw = localStorage.getItem(DB_CONFIG_KEY);
+      if (raw) return { ...config, ...JSON.parse(raw) };
+    } catch {}
+    return config;
+  }
+
+  function saveConfig() {
+    try {
+      localStorage.setItem(DB_CONFIG_KEY, JSON.stringify(config));
+    } catch {}
+  }
+
+  config = loadSavedConfig();
+
   function tr(key: TranslationKey): string {
     return t(lang, key);
   }
@@ -43,6 +61,7 @@
       const result = await connectDb(config);
       message = result;
       success = true;
+      saveConfig();
       onConnect?.(config);
     } catch (e: any) {
       message = String(e);

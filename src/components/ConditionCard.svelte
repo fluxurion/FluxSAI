@@ -26,7 +26,7 @@
     return opts.find(o => o.value === val)?.label ?? `#${val}`;
   }
 
-  let saveTimeout = $state<ReturnType<typeof setTimeout> | null>(null);
+  let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
     if (saveMode === 'auto' && connected) {
