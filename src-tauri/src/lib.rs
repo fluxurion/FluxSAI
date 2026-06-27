@@ -16,6 +16,7 @@ pub fn run() {
             db::test_connection,
             db::fetch_scripts,
             db::fetch_script_by_entry,
+            db::search_scripts_by_name,
             db::insert_script,
             db::delete_script,
             db::fetch_conditions,

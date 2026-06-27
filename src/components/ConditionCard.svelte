@@ -29,7 +29,7 @@
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
-    if (saveMode === 'auto' && connected) {
+    if (saveMode === 'auto' && !connected) {
       if (saveTimeout) clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => {
         onSave?.(cond);

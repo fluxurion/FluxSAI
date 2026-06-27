@@ -3,9 +3,9 @@
   import EventGroup from './components/EventGroup.svelte';
   import SqlPreview from './components/SqlPreview.svelte';
   import DbModal from './components/DbModal.svelte';
-  import type { SmartScriptRow, ConditionRow, DbConfig } from './lib/api';
+  import type { SmartScriptRow, ConditionRow, DbConfig, NameSearchResult } from './lib/api';
   import * as api from './lib/api';
-  import { createEmptyScriptRow, createEmptyConditionRow, generateInsertSQL, SMART_SCRIPT_TYPES } from './lib/types';
+  import { createEmptyScriptRow, createEmptyConditionRow, SMART_SCRIPT_TYPES } from './lib/types';
   import { groupByEvent, getEventLabel, getActionLabel, type EventGroup as EventGroupData, generateScriptComment } from './lib/paramMeta';
   import { getStoredLang, storeLang, t, type Lang, type TranslationKey } from './lib/i18n';
   import { save } from '@tauri-apps/plugin-dialog';
@@ -25,6 +25,7 @@
     firstEventLabel: string;
     firstActionLabel: string;
     timestamp: number;
+    isOnline: boolean;
   }
 
   function loadCachedScripts(): CachedScript[] {
@@ -60,7 +61,7 @@
     } catch {}
   }
 
-  function saveCachedScript(entry: number, sourceType: number, count: number, rows?: SmartScriptRow[], conditions?: ConditionRow[]) {
+  function saveCachedScript(entry: number, sourceType: number, count: number, rows?: SmartScriptRow[], conditions?: ConditionRow[], isOnline: boolean = false) {
     if (entry === 0) return;
     let cached = loadCachedScripts();
     cached = cached.filter(c => !(c.entryorguid === entry && c.source_type === sourceType));
@@ -80,7 +81,7 @@
       }
     }
     
-    cached.unshift({ entryorguid: entry, source_type: sourceType, rowCount: count, eventCount, actionCount, conditionCount, firstEventLabel, firstActionLabel, timestamp: Date.now() });
+    cached.unshift({ entryorguid: entry, source_type: sourceType, rowCount: count, eventCount, actionCount, conditionCount, firstEventLabel, firstActionLabel, timestamp: Date.now(), isOnline });
     cached = cached.slice(0, MAX_CACHED);
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(CACHE_KEY, JSON.stringify(cached));
@@ -90,6 +91,8 @@
   }
 
   function openCachedScript(entry: number, sourceType: number) {
+    const cached = loadCachedScripts().find(c => c.entryorguid === entry && c.source_type === sourceType);
+    currentIsOnline = cached?.isOnline ?? false;
     currentEntry = entry;
     currentSourceType = sourceType;
     handleSearch(entry, sourceType);
@@ -145,27 +148,62 @@
   let newScriptEntry = $state('');
   let newScriptType = $state(0);
   let welcomeSearchEntry = $state('');
+  let welcomeSearchName = $state('');
+  let welcomeSearchMode = $state<'entry' | 'name'>('entry');
   let expandedGroups = $state<Set<string>>(new Set());
+  let defaultExpanded = $state(true);
+  let nameSearchResult = $state<NameSearchResult | null>(null);
+  let nameSearchPage = $state(0);
   let welcomeSearchType = $state(0);
   let currentEntry = $state(0);
   let currentSourceType = $state(0);
+  let currentIsOnline = $state(false);
   let lang = $state<Lang>(getStoredLang());
+  let theme = $state<'dark' | 'light'>('dark');
   let statusMessage = $state('');
   let statusType = $state<'info' | 'success' | 'error'>('info');
 
+  // Undo/Redo history
+  let history = $state<SmartScriptRow[][]>([]);
+  let historyIndex = $state(-1);
+  const MAX_HISTORY = 50;
+
+  // Context menu for recent list
+  let contextMenu = $state<{ x: number; y: number; entry: number; sourceType: number } | null>(null);
+
+  // Recent list filter
+  let recentFilter = $state('');
+
+  // Multi-select for events
+  let selectedEventIds = $state<Set<string>>(new Set());
+
+  // Drag and drop for event reordering
+  let draggedEventId = $state<string | null>(null);
+
   let eventGroups = $derived(groupByEvent(scripts));
+
+  let filteredCachedScripts = $derived(() => {
+    if (!recentFilter) return cachedScripts;
+    const filter = recentFilter.toLowerCase();
+    return cachedScripts.filter(cs => {
+      const entryMatch = cs.entryorguid.toString().includes(filter);
+      const typeMatch = SMART_SCRIPT_TYPES.find(st => st.value === cs.source_type)?.label.toLowerCase().includes(filter);
+      const eventMatch = cs.firstEventLabel?.toLowerCase().includes(filter);
+      const actionMatch = cs.firstActionLabel?.toLowerCase().includes(filter);
+      return entryMatch || typeMatch || eventMatch || actionMatch;
+    });
+  });
 
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
     if (saveMode !== 'auto' || !currentEntry) return;
-    const _track = scripts.length + '|' + conditions.length + '|' + scripts.map(s => s.action_param1 + s.action_param2 + s.action_param3 + s.action_param4 + s.action_param5 + s.action_param6 + s.event_param1 + s.event_param2 + s.event_param3 + s.event_param4 + s.target_param1 + s.target_param2 + s.target_param3).join('');
+    scripts.length + '|' + conditions.length + '|' + scripts.map(s => s.action_param1 + s.action_param2 + s.action_param3 + s.action_param4 + s.action_param5 + s.action_param6 + s.event_param1 + s.event_param2 + s.event_param3 + s.event_param4 + s.target_param1 + s.target_param2 + s.target_param3).join('');
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(async () => {
+    autoSaveTimer = setTimeout(() => {
       try {
-        if (!connected && scripts.length > 0) {
-          await api.saveEntryToFile(scripts, conditions);
-          saveCachedScript(currentEntry, currentSourceType, scripts.length, scripts, conditions);
+        if (scripts.length > 0) {
+          saveCachedScript(currentEntry, currentSourceType, scripts.length, scripts, conditions, currentIsOnline);
         }
       } catch {}
     }, 1200);
@@ -175,6 +213,27 @@
   function tr(key: TranslationKey): string {
     return t(lang, key);
   }
+
+  function getStoredTheme(): 'dark' | 'light' {
+    if (typeof localStorage === 'undefined') return 'dark';
+    try {
+      const stored = localStorage.getItem('fluxsai_theme');
+      return (stored === 'light' ? 'light' : 'dark');
+    } catch {
+      return 'dark';
+    }
+  }
+
+  function handleThemeChange(newTheme: 'dark' | 'light') {
+    theme = newTheme;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('fluxsai_theme', newTheme);
+    }
+  }
+
+  $effect(() => {
+    theme = getStoredTheme();
+  });
 
   function handleLangChange(newLang: Lang) {
     lang = newLang;
@@ -200,6 +259,10 @@
       const cached = loadCachedRows(entry, sourceType);
       if (cached && cached.length > 0) {
         scripts = cached;
+        currentIsOnline = false;
+        history = [[...cached]];
+        historyIndex = 0;
+        saveCachedScript(entry, sourceType, cached.length, cached, [], false);
         showStatus(`${tr('loaded')} ${cached.length} ${tr('scriptsForEntry')} ${entry} (cached)`, 'success');
         return;
       }
@@ -209,16 +272,78 @@
     try {
       const rows = await api.fetchScriptByEntry(entry, sourceType);
       scripts = rows;
+      currentIsOnline = true;
+      history = [[...rows]];
+      historyIndex = 0;
+      nameSearchResult = null;
+      nameSearchPage = 0;
+      const evCount = new Set(rows.map(r => r.eventId ?? r.id)).size;
+      defaultExpanded = evCount <= 5;
+      expandedGroups = new Set();
       try {
         conditions = await api.fetchAllConditionsForEntry(entry);
       } catch {
         conditions = [];
       }
-      saveCachedScript(entry, sourceType, rows.length, rows, conditions);
+      saveCachedScript(entry, sourceType, rows.length, rows, conditions, true);
       showStatus(`${tr('loaded')} ${rows.length} ${tr('scriptsForEntry')} ${entry}`, 'success');
     } catch (e: any) {
       showStatus(String(e), 'error');
     }
+  }
+
+  async function handleNameSearch(name: string, sourceType: number) {
+    if (!connected) {
+      showStatus(tr('notConnected'), 'error');
+      return;
+    }
+    try {
+      const result = await api.searchScriptsByName(name, sourceType);
+      if (result.scripts.length === 0) {
+        showStatus(`${tr('nameSearchNoResults')} "${name}"`, 'error');
+        return;
+      }
+      nameSearchResult = result;
+      nameSearchPage = 0;
+      loadNameSearchPage(result, 0, sourceType);
+      showStatus(`${tr('nameSearchFound')} ${result.entries.length} ${tr('nameSearchEntries')}, ${result.scripts.length} ${tr('nameSearchScripts')}`, 'success');
+    } catch (e: any) {
+      showStatus(String(e), 'error');
+    }
+  }
+
+  function getNameSearchEntryGroups(result: NameSearchResult): number[] {
+    const seen = new Set<number>();
+    const order: number[] = [];
+    for (const s of result.scripts) {
+      if (!seen.has(s.entryorguid)) { seen.add(s.entryorguid); order.push(s.entryorguid); }
+    }
+    return order;
+  }
+
+  async function loadNameSearchPage(result: NameSearchResult, page: number, sourceType: number) {
+    const groups = getNameSearchEntryGroups(result);
+    const entryorguid = groups[page] ?? groups[0];
+    scripts = result.scripts.filter(s => s.entryorguid === entryorguid);
+    currentEntry = entryorguid;
+    currentSourceType = sourceType;
+    expandedGroups = new Set();
+    const evCount = new Set(scripts.map(r => r.eventId ?? r.id)).size;
+    defaultExpanded = evCount <= 5;
+    try {
+      conditions = await api.fetchAllConditionsForEntry(entryorguid);
+    } catch {
+      conditions = [];
+    }
+  }
+
+  async function navigateNameSearch(direction: -1 | 1) {
+    if (!nameSearchResult) return;
+    const groups = getNameSearchEntryGroups(nameSearchResult);
+    const newPage = Math.max(0, Math.min(groups.length - 1, nameSearchPage + direction));
+    if (newPage === nameSearchPage) return;
+    nameSearchPage = newPage;
+    await loadNameSearchPage(nameSearchResult, newPage, currentSourceType);
   }
 
   function nextId(): number {
@@ -248,6 +373,7 @@
   }
 
   function createNewScript(entry: number, sourceType: number) {
+    addToHistory();
     currentEntry = entry;
     currentSourceType = sourceType;
     const row = createEmptyScriptRow(entry, sourceType);
@@ -257,12 +383,13 @@
     row.comment = generateScriptComment(row);
     scripts = [...scripts, row];
     expandedGroups = new Set([`ev-${evId}`]);
-    saveCachedScript(entry, sourceType, scripts.length, scripts);
+    saveCachedScript(entry, sourceType, scripts.length, scripts, [], connected);
     sidebarCollapsed = true;
     showStatus(tr('newEventAdded'), 'success');
   }
 
   function handleAddAction(group: EventGroupData) {
+    addToHistory();
     const template = scripts[group.rows[0]];
     const row = createEmptyScriptRow(currentEntry, currentSourceType);
     row.id = nextId();
@@ -282,7 +409,8 @@
     showStatus(tr('actionAdded'), 'success');
   }
 
-  async function handleDeleteAction(group: EventGroupData, rowIdx: number) {
+  async function handleDeleteAction(_group: EventGroupData, rowIdx: number) {
+    addToHistory();
     const row = scripts[rowIdx];
     if (connected && row) {
       try {
@@ -297,6 +425,7 @@
   }
 
   async function handleDeleteEvent(group: EventGroupData) {
+    addToHistory();
     const indices = new Set(group.rows);
     if (connected) {
       for (const rowIdx of group.rows) {
@@ -315,7 +444,8 @@
     showStatus(tr('actionRemoved'), 'info');
   }
 
-  function handleDuplicateAction(group: EventGroupData, rowIdx: number) {
+  function handleDuplicateAction(_group: EventGroupData, rowIdx: number) {
+    addToHistory();
     const orig = scripts[rowIdx];
     const copy = { ...orig, id: nextId() };
     scripts = [...scripts.slice(0, rowIdx + 1), copy, ...scripts.slice(rowIdx + 1)];
@@ -323,6 +453,7 @@
   }
 
   function handleAddCondition(row: SmartScriptRow) {
+    addToHistory();
     const typeLabel = SMART_SCRIPT_TYPES.find(t => t.value === row.source_type)?.label ?? 'Entry';
     const c = createEmptyConditionRow();
     c.SourceEntry = row.entryorguid;
@@ -334,6 +465,7 @@
   }
 
   function handleDeleteCondition(cond: ConditionRow) {
+    addToHistory();
     conditions = conditions.filter(c => c !== cond);
   }
 
@@ -343,8 +475,8 @@
         await api.insertCondition(cond);
         showStatus('Condition saved to DB', 'success');
       } else {
-        const msg = await api.saveEntryToFile(scripts, conditions);
-        showStatus(msg, 'success');
+        saveCachedScript(currentEntry, currentSourceType, scripts.length, scripts, conditions, currentIsOnline);
+        showStatus('Condition saved to cache', 'success');
       }
     } catch (e: any) {
       showStatus(String(e), 'error');
@@ -357,8 +489,8 @@
         await api.insertScript(row);
         showStatus('Action saved to DB', 'success');
       } else {
-        const msg = await api.saveEntryToFile(scripts, conditions);
-        showStatus(msg, 'success');
+        saveCachedScript(currentEntry, currentSourceType, scripts.length, scripts, conditions, currentIsOnline);
+        showStatus('Action saved to cache', 'success');
       }
     } catch (e: any) {
       showStatus(String(e), 'error');
@@ -373,8 +505,8 @@
         }
         showStatus(`Event saved to DB (${group.rows.length} rows)`, 'success');
       } else {
-        const msg = await api.saveEntryToFile(scripts, conditions);
-        showStatus(msg, 'success');
+        saveCachedScript(currentEntry, currentSourceType, scripts.length, scripts, conditions, currentIsOnline);
+        showStatus(`Event saved to cache (${group.rows.length} rows)`, 'success');
       }
     } catch (e: any) {
       showStatus(String(e), 'error');
@@ -392,6 +524,11 @@
       showStatus(tr('notConnectedShort'), 'error');
       return;
     }
+    const validation = validateScripts();
+    if (!validation.valid) {
+      showStatus(`Validation errors: ${validation.errors.join('; ')}`, 'error');
+      return;
+    }
     try {
       for (const row of scripts) {
         await api.insertScript(row);
@@ -404,6 +541,36 @@
       for (const cond of conditions) {
         await api.insertCondition(cond);
       }
+      showStatus(`${tr('savedToDb')} ${scripts.length} ${tr('scriptsToDb')} + ${conditions.length} conditions`, 'success');
+    } catch (e: any) {
+      showStatus(String(e), 'error');
+    }
+  }
+
+  async function handleUploadToDb() {
+    if (!connected) {
+      showStatus(tr('notConnectedShort'), 'error');
+      return;
+    }
+    const validation = validateScripts();
+    if (!validation.valid) {
+      showStatus(`Validation errors: ${validation.errors.join('; ')}`, 'error');
+      return;
+    }
+    try {
+      for (const row of scripts) {
+        await api.insertScript(row);
+      }
+      // Delete existing conditions for this entry
+      if (currentEntry > 0) {
+        await api.deleteConditionsForSmartEvent(currentEntry, 0);
+      }
+      // Insert all conditions
+      for (const cond of conditions) {
+        await api.insertCondition(cond);
+      }
+      currentIsOnline = true;
+      saveCachedScript(currentEntry, currentSourceType, scripts.length, scripts, conditions, true);
       showStatus(`${tr('savedToDb')} ${scripts.length} ${tr('scriptsToDb')} + ${conditions.length} conditions`, 'success');
     } catch (e: any) {
       showStatus(String(e), 'error');
@@ -430,17 +597,6 @@
     } catch (e: any) {
       showStatus(String(e), 'error');
     }
-  }
-
-  function handleClearRequest() {
-    if (scripts.length === 0) {
-      scripts = [];
-      currentEntry = 0;
-      currentSourceType = 0;
-      sidebarCollapsed = false;
-      return;
-    }
-    showClearModal = true;
   }
 
   async function handleDeleteFromDb() {
@@ -481,6 +637,13 @@
   }
 
   function handleWelcomeSearch() {
+    if (welcomeSearchMode === 'name') {
+      if (welcomeSearchName.trim()) {
+        if (welcomeSearchType > 1) welcomeSearchType = 0;
+        handleNameSearch(welcomeSearchName.trim(), welcomeSearchType);
+      }
+      return;
+    }
     const entry = parseInt(welcomeSearchEntry);
     if (!isNaN(entry)) {
       handleSearch(entry, welcomeSearchType);
@@ -491,37 +654,246 @@
     handleNew();
   }
 
-  function handleAddActionToLastGroup() {
-    const groups = groupByEvent(scripts);
-    if (groups.length === 0) {
+  function handleKeyDown(e: KeyboardEvent) {
+    // Ctrl+S: Save
+    if (e.ctrlKey && e.key === 's') {
+      e.preventDefault();
+      if (connected) {
+        handleSaveAll();
+      } else {
+        saveCachedScript(currentEntry, currentSourceType, scripts.length, scripts, conditions, currentIsOnline);
+        showStatus('Saved to cache', 'success');
+      }
+      return;
+    }
+    // Ctrl+E: Export
+    if (e.ctrlKey && e.key === 'e') {
+      e.preventDefault();
+      handleExport();
+      return;
+    }
+    // Ctrl+N: New script
+    if (e.ctrlKey && e.key === 'n') {
+      e.preventDefault();
       handleNew();
       return;
     }
-    handleAddAction(groups[groups.length - 1]);
+    // Ctrl+F: Focus search
+    if (e.ctrlKey && e.key === 'f') {
+      e.preventDefault();
+      if (currentEntry === 0) {
+        const searchInput = document.querySelector('.welcome-search-input') as HTMLInputElement;
+        searchInput?.focus();
+      }
+      return;
+    }
+    // Ctrl+Z: Undo
+    if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      handleUndo();
+      return;
+    }
+    // Ctrl+Y or Ctrl+Shift+Z: Redo
+    if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
+    // Escape: Close modals
+    if (e.key === 'Escape') {
+      if (showDbModal) showDbModal = false;
+      if (showNewScriptModal) showNewScriptModal = false;
+      if (showClearModal) showClearModal = false;
+      return;
+    }
   }
 
-  function handleAddLinkedScript() {
-    const row = createEmptyScriptRow(currentEntry, currentSourceType);
-    row.id = nextId();
-    row.link = 0;
-    row.comment = generateScriptComment(row);
-    scripts = [...scripts, row];
-    saveCachedScript(currentEntry, currentSourceType, scripts.length);
-    showStatus(tr('linkedScriptAdded'), 'success');
+  function addToHistory() {
+    const currentSnapshot = [...scripts];
+    if (historyIndex >= 0 && JSON.stringify(history[historyIndex]) === JSON.stringify(currentSnapshot)) {
+      return;
+    }
+    history = history.slice(0, historyIndex + 1);
+    history = [...history, currentSnapshot];
+    if (history.length > MAX_HISTORY) {
+      history = history.slice(-MAX_HISTORY);
+    }
+    historyIndex = history.length - 1;
+  }
+
+  function handleUndo() {
+    if (historyIndex > 0) {
+      historyIndex--;
+      scripts = [...history[historyIndex]];
+      showStatus('Undo', 'info');
+    }
+  }
+
+  function handleRedo() {
+    if (historyIndex < history.length - 1) {
+      historyIndex++;
+      scripts = [...history[historyIndex]];
+      showStatus('Redo', 'info');
+    }
+  }
+
+  function validateScripts(): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    if (currentEntry === 0) {
+      errors.push('Entry/GUID cannot be 0');
+    }
+    
+    for (const row of scripts) {
+      if (row.entryorguid === 0) {
+        errors.push(`Row ${row.id}: Entry/GUID is 0`);
+      }
+      if (row.event_type === 0 && row.action_type === 0) {
+        errors.push(`Row ${row.id}: Both event and action type are 0 (NONE)`);
+      }
+      if (row.event_chance < 0 || row.event_chance > 100) {
+        errors.push(`Row ${row.id}: Event chance must be between 0-100`);
+      }
+      if (row.id === 0) {
+        errors.push(`Row has ID 0 (should be unique)`);
+      }
+    }
+    
+    // Check for duplicate IDs
+    const ids = scripts.map(s => s.id);
+    const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+    if (duplicateIds.length > 0) {
+      errors.push(`Duplicate row IDs: ${[...new Set(duplicateIds)].join(', ')}`);
+    }
+    
+    return { valid: errors.length === 0, errors };
+  }
+
+  function handleContextMenu(e: MouseEvent, entry: number, sourceType: number) {
+    e.preventDefault();
+    contextMenu = { x: e.clientX, y: e.clientY, entry, sourceType };
+  }
+
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
+  function handleContextAction(action: string) {
+    if (!contextMenu) return;
+    const { entry, sourceType } = contextMenu;
+
+    if (action === 'open') {
+      openCachedScript(entry, sourceType);
+    } else if (action === 'remove') {
+      removeCachedScript(entry, sourceType);
+    } else if (action === 'export') {
+      const cached = loadCachedRows(entry, sourceType);
+      if (cached && cached.length > 0) {
+        handleExport();
+      }
+    }
+
+    closeContextMenu();
+  }
+
+  function handleToggleSelect(eventId: string) {
+    if (selectedEventIds.has(eventId)) {
+      selectedEventIds.delete(eventId);
+    } else {
+      selectedEventIds.add(eventId);
+    }
+    selectedEventIds = new Set(selectedEventIds);
+  }
+
+  function handleSelectAll() {
+    const allIds = eventGroups.map(g => g.eventId);
+    selectedEventIds = new Set(allIds);
+  }
+
+  function handleDeselectAll() {
+    selectedEventIds = new Set();
+  }
+
+  function handleDeleteSelected() {
+    if (selectedEventIds.size === 0) return;
+    addToHistory();
+    const indicesToDelete = new Set<number>();
+    for (const group of eventGroups) {
+      if (selectedEventIds.has(group.eventId)) {
+        group.rows.forEach(idx => indicesToDelete.add(idx));
+      }
+    }
+    scripts = scripts.filter((_, i) => !indicesToDelete.has(i));
+    selectedEventIds = new Set();
+    showStatus(`Deleted ${indicesToDelete.size} rows`, 'info');
+  }
+
+  function handleDragStart(e: DragEvent, eventId: string) {
+    draggedEventId = eventId;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+    }
+  }
+
+  function handleDragOver(e: DragEvent, eventId: string) {
+    e.preventDefault();
+    if (draggedEventId && draggedEventId !== eventId) {
+      e.dataTransfer!.dropEffect = 'move';
+    }
+  }
+
+  function handleDrop(e: DragEvent, targetEventId: string) {
+    e.preventDefault();
+    if (!draggedEventId || draggedEventId === targetEventId) return;
+
+    addToHistory();
+    const sourceGroup = eventGroups.find(g => g.eventId === draggedEventId);
+    const targetGroup = eventGroups.find(g => g.eventId === targetEventId);
+
+    if (!sourceGroup || !targetGroup) return;
+
+    // Get all row indices from source group
+    const sourceIndices = sourceGroup.rows;
+    const targetIndices = targetGroup.rows;
+
+    // Remove source rows from scripts
+    const sourceRows = sourceIndices.map(i => scripts[i]);
+    const remainingScripts = scripts.filter((_, i) => !sourceIndices.has(i));
+
+    // Find the position to insert (before target group)
+    const insertPosition = Math.min(...targetIndices);
+
+    // Insert source rows at the new position
+    const newScripts = [
+      ...remainingScripts.slice(0, insertPosition),
+      ...sourceRows,
+      ...remainingScripts.slice(insertPosition)
+    ];
+
+    scripts = newScripts;
+    draggedEventId = null;
+    showStatus('Events reordered', 'info');
+  }
+
+  function handleDragEnd() {
+    draggedEventId = null;
   }
 </script>
 
-<div class="app-container" class:sidebar-collapsed={sidebarCollapsed && scripts.length > 0}>
+<div class="app-container" class:sidebar-collapsed={sidebarCollapsed && scripts.length > 0} class:theme-light={theme === 'light'} onkeydown={handleKeyDown} onclick={closeContextMenu} tabindex="-1">
   <div class="sidebar-wrapper" class:collapsed={sidebarCollapsed && scripts.length > 0}>
     <Sidebar
       connected={connected}
       onConnectClick={() => showDbModal = true}
       onSearch={handleSearch}
+      onNameSearch={handleNameSearch}
       onNew={handleAddRow}
       {lang}
       onLangChange={handleLangChange}
       bind:saveMode
       bind:uiStyle
+      {theme}
+      onThemeChange={handleThemeChange}
     />
   </div>
 
@@ -537,6 +909,9 @@
           <span class="badge badge-blue">{currentEntry}</span>
           <span class="badge badge-purple">{SMART_SCRIPT_TYPES.find(st => st.value === currentSourceType)?.label ?? currentSourceType}</span>
           <span class="badge badge-green">{eventGroups.length} {tr('events')}</span>
+          <span class="status-indicator" class:online={currentIsOnline} class:offline={!currentIsOnline} title={currentIsOnline ? tr('online') : tr('offline')}>
+            {currentIsOnline ? '🟢' : '🔴'}
+          </span>
         {:else}
           <span class="top-bar-hint">{tr('searchOrCreate')}</span>
         {/if}
@@ -550,6 +925,11 @@
             {tr('sql')}
           </button>
         </div>
+        {#if !currentIsOnline && connected && scripts.length > 0}
+          <button class="btn-sync" onclick={handleUploadToDb}>
+            {tr('uploadToDb')}
+          </button>
+        {/if}
         <button class="btn-primary" onclick={handleSaveAll} disabled={!connected || scripts.length === 0}>
           {tr('saveToDb')}
         </button>
@@ -591,19 +971,39 @@
               <h2>{tr('welcomeTitle')}</h2>
               <p>{tr('welcomeText')}</p>
               <div class="welcome-search">
-                <input
-                  type="text"
-                  class="welcome-search-input"
-                  placeholder={tr('entryGuid')}
-                  bind:value={welcomeSearchEntry}
-                  onkeydown={(e) => e.key === 'Enter' && handleWelcomeSearch()}
-                  disabled={!connected}
-                />
-                <select bind:value={welcomeSearchType} disabled={!connected}>
-                  {#each SMART_SCRIPT_TYPES as st}
-                    <option value={st.value}>{st.label}</option>
-                  {/each}
-                </select>
+                <div class="welcome-search-mode">
+                  <button class="save-mode-btn" class:active={welcomeSearchMode === 'entry'} onclick={() => welcomeSearchMode = 'entry'}>{tr('entryGuid')}</button>
+                  <button class="save-mode-btn" class:active={welcomeSearchMode === 'name'} onclick={() => welcomeSearchMode = 'name'}>{tr('searchByName')}</button>
+                </div>
+                {#if welcomeSearchMode === 'entry'}
+                  <input
+                    type="text"
+                    class="welcome-search-input"
+                    placeholder={tr('entryGuid')}
+                    bind:value={welcomeSearchEntry}
+                    onkeydown={(e) => e.key === 'Enter' && handleWelcomeSearch()}
+                    disabled={!connected}
+                  />
+                  <select bind:value={welcomeSearchType} disabled={!connected}>
+                    {#each SMART_SCRIPT_TYPES as st}
+                      <option value={st.value}>{st.label}</option>
+                    {/each}
+                  </select>
+                {:else}
+                  <input
+                    type="text"
+                    class="welcome-search-input"
+                    placeholder={tr('namePlaceholder')}
+                    bind:value={welcomeSearchName}
+                    onkeydown={(e) => e.key === 'Enter' && handleWelcomeSearch()}
+                    disabled={!connected}
+                  />
+                  <select bind:value={welcomeSearchType} disabled={!connected}>
+                    {#each SMART_SCRIPT_TYPES.filter(st => st.value === 0 || st.value === 1) as st}
+                      <option value={st.value}>{st.label}</option>
+                    {/each}
+                  </select>
+                {/if}
                 <button class="btn-primary" onclick={handleWelcomeSearch} disabled={!connected}>
                   {tr('search')}
                 </button>
@@ -617,12 +1017,21 @@
               {#if cachedScripts.length > 0}
                 <div class="recent-scripts">
                   <div class="recent-title">{tr('recentScripts')}</div>
+                  <input
+                    type="text"
+                    placeholder={tr('filter')}
+                    bind:value={recentFilter}
+                    class="recent-filter"
+                  />
                   <div class="recent-list">
-                    {#each cachedScripts as cs}
+                    {#each filteredCachedScripts() as cs}
                       <div class="recent-item-wrapper">
-                        <button class="recent-item" onclick={() => openCachedScript(cs.entryorguid, cs.source_type)}>
+                        <button class="recent-item" onclick={() => openCachedScript(cs.entryorguid, cs.source_type)} oncontextmenu={(e) => handleContextMenu(e, cs.entryorguid, cs.source_type)}>
                           <span class="recent-entry">{cs.entryorguid}</span>
                           <span class="recent-type">{SMART_SCRIPT_TYPES.find(st => st.value === cs.source_type)?.label ?? cs.source_type}</span>
+                          <span class="recent-status" class:online={cs.isOnline} class:offline={!cs.isOnline}>
+                            {cs.isOnline ? '🟢' : '🔴'}
+                          </span>
                           {#if cs.firstEventLabel}
                             <span class="recent-event-label">{cs.firstEventLabel}</span>
                           {/if}
@@ -636,6 +1045,13 @@
                     {/each}
                   </div>
                 </div>
+                {#if contextMenu}
+                  <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
+                    <button class="context-menu-item" onclick={() => handleContextAction('open')}>{tr('open')}</button>
+                    <button class="context-menu-item" onclick={() => handleContextAction('export')}>{tr('export')}</button>
+                    <button class="context-menu-item danger" onclick={() => handleContextAction('remove')}>{tr('remove')}</button>
+                  </div>
+                {/if}
               {:else}
                 <p class="no-recent">{tr('noRecentScripts')}</p>
               {/if}
@@ -643,6 +1059,20 @@
           </div>
           {:else}
             <div class="scripts-list">
+              {#if nameSearchResult}
+                {@const nsGroups = getNameSearchEntryGroups(nameSearchResult)}
+                <div class="name-search-pager">
+                  <button class="pager-btn" onclick={() => navigateNameSearch(-1)} disabled={nameSearchPage === 0}>‹</button>
+                  <span class="pager-info">
+                    <span class="pager-entry">{currentEntry}</span>
+                    {#if nameSearchResult.entries.find(e => e.entry === currentEntry)}
+                      <span class="pager-name">{nameSearchResult.entries.find(e => e.entry === currentEntry)?.name}</span>
+                    {/if}
+                    <span class="pager-count">{nameSearchPage + 1} / {nsGroups.length}</span>
+                  </span>
+                  <button class="pager-btn" onclick={() => navigateNameSearch(1)} disabled={nameSearchPage >= nsGroups.length - 1}>›</button>
+                </div>
+              {/if}
               <div class="source-header glass-event">
                 <label class="source-field">
                   <span class="param-label">{tr('entryGuid')}</span>
@@ -673,7 +1103,19 @@
                 </label>
                 <div class="source-info">
                   <span class="badge badge-green">{eventGroups.length} {tr('events')}</span>
+                  {#if selectedEventIds.size > 0}
+                    <span class="badge badge-purple">{selectedEventIds.size} selected</span>
+                  {/if}
                 </div>
+                {#if eventGroups.length > 0}
+                  <div class="batch-actions">
+                    <button class="batch-btn" onclick={handleSelectAll} title="Select All">☑ All</button>
+                    <button class="batch-btn" onclick={handleDeselectAll} title="Deselect All">☐ None</button>
+                    {#if selectedEventIds.size > 0}
+                      <button class="batch-btn danger" onclick={handleDeleteSelected} title="Delete Selected">🗑 Delete ({selectedEventIds.size})</button>
+                    {/if}
+                  </div>
+                {/if}
               </div>
               {#each eventGroups as group (group.key)}
                 <EventGroup
@@ -686,6 +1128,12 @@
                   onAddCondition={handleAddCondition}
                   onDeleteCondition={handleDeleteCondition}
                   onConditionSave={handleConditionSave}
+                  {selectedEventIds}
+                  onToggleSelect={handleToggleSelect}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                  onDragEnd={handleDragEnd}
                   onSaveEvent={handleEventSave}
                   {conditions}
                   onDeleteEvent={handleDeleteEvent}
@@ -693,7 +1141,7 @@
                   {saveMode}
                   {uiStyle}
                   {connected}
-                  expanded={expandedGroups.size === 0 || expandedGroups.has(`ev-${scripts[group.rows[0]]?.eventId ?? group.key}`)}
+                  expanded={defaultExpanded ? (expandedGroups.size === 0 || expandedGroups.has(`ev-${scripts[group.rows[0]]?.eventId ?? group.key}`)) : expandedGroups.has(`ev-${scripts[group.rows[0]]?.eventId ?? group.key}`)}
                 />
               {/each}
               <button class="add-script-btn" onclick={handleNew}>
@@ -845,6 +1293,12 @@
   .top-bar-hint {
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  .status-indicator {
+    font-size: 14px;
+    margin-left: 6px;
+    cursor: help;
   }
 
   .top-bar-right {
@@ -1047,10 +1501,48 @@
 
   .welcome-search {
     display: flex;
+    flex-direction: column;
     gap: 6px;
     width: 100%;
     max-width: 480px;
     margin-bottom: 8px;
+  }
+
+  .welcome-search-mode {
+    display: flex;
+    gap: 4px;
+    background: rgba(10, 14, 20, 0.6);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+  }
+
+  .welcome-search-mode .save-mode-btn {
+    flex: 1;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 4px;
+    transition: var(--transition);
+    border: none;
+    cursor: pointer;
+  }
+
+  .welcome-search-mode .save-mode-btn.active {
+    background: rgba(88, 166, 255, 0.15);
+    color: var(--accent-blue);
+  }
+
+  .welcome-search-mode .save-mode-btn:hover:not(.active) {
+    color: var(--text-primary);
+  }
+
+  .welcome-search > .welcome-search-input,
+  .welcome-search > select,
+  .welcome-search > button {
+    width: 100%;
   }
 
   .welcome-search-input {
@@ -1202,6 +1694,27 @@
     border: 1px solid rgba(188, 140, 255, 0.2);
   }
 
+  .recent-status {
+    font-size: 12px;
+    margin-left: 4px;
+  }
+
+  .recent-filter {
+    width: 100%;
+    padding: 6px 10px;
+    background: rgba(10, 14, 20, 0.6);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 12px;
+    margin-bottom: 8px;
+    outline: none;
+  }
+
+  .recent-filter:focus {
+    border-color: var(--accent-blue);
+  }
+
   .recent-info {
     font-size: 11px;
     color: var(--text-muted);
@@ -1216,10 +1729,113 @@
     margin-bottom: 28px;
   }
 
+  .context-menu {
+    position: fixed;
+    background: rgba(10, 14, 20, 0.95);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    z-index: 1000;
+    min-width: 120px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  }
+
+  .context-menu-item {
+    width: 100%;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    text-align: left;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: var(--transition);
+  }
+
+  .context-menu-item:hover {
+    background: rgba(88, 166, 255, 0.15);
+    color: var(--accent-blue);
+  }
+
+  .context-menu-item.danger:hover {
+    background: rgba(248, 81, 73, 0.15);
+    color: var(--accent-red);
+  }
+
   .scripts-list {
     display: flex;
     flex-direction: column;
     gap: 4px;
+  }
+
+  .name-search-pager {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(88, 166, 255, 0.06);
+    border: 1px solid rgba(88, 166, 255, 0.2);
+    border-radius: var(--radius-sm);
+    margin-bottom: 4px;
+  }
+
+  .pager-btn {
+    background: rgba(88, 166, 255, 0.1);
+    border: 1px solid rgba(88, 166, 255, 0.25);
+    color: var(--accent-blue);
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    font-size: 18px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+  }
+
+  .pager-btn:hover:not(:disabled) {
+    background: rgba(88, 166, 255, 0.2);
+    border-color: var(--accent-blue);
+  }
+
+  .pager-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .pager-info {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+  }
+
+  .pager-entry {
+    font-weight: 700;
+    color: var(--accent-blue);
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .pager-name {
+    color: var(--text-secondary);
+    font-size: 12px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pager-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    margin-left: auto;
   }
 
   .add-script-btn {
@@ -1270,6 +1886,35 @@
     gap: 8px;
   }
 
+  .batch-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .batch-btn {
+    padding: 4px 10px;
+    background: rgba(88, 166, 255, 0.1);
+    border: 1px solid rgba(88, 166, 255, 0.2);
+    color: var(--text-secondary);
+    font-size: 12px;
+    border-radius: 4px;
+    transition: var(--transition);
+  }
+
+  .batch-btn:hover {
+    background: rgba(88, 166, 255, 0.2);
+    color: var(--accent-blue);
+    border-color: var(--accent-blue);
+  }
+
+  .batch-btn.danger:hover {
+    background: rgba(248, 81, 73, 0.15);
+    color: var(--accent-red);
+    border-color: var(--accent-red);
+  }
+
   .btn-cancel {
     padding: 6px 14px;
     background: transparent;
@@ -1290,6 +1935,23 @@
   .btn-cancel:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  .btn-sync {
+    background: linear-gradient(135deg, rgba(63, 185, 80, 0.2), rgba(88, 166, 255, 0.2));
+    border: 1px solid rgba(63, 185, 80, 0.3);
+    color: var(--accent-green);
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+  }
+
+  .btn-sync:hover {
+    background: linear-gradient(135deg, rgba(63, 185, 80, 0.3), rgba(88, 166, 255, 0.3));
+    border-color: var(--accent-green);
+    box-shadow: 0 0 12px rgba(63, 185, 80, 0.3);
   }
 
   .sql-tab {

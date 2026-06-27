@@ -79,6 +79,20 @@ export async function fetchScriptByEntry(entryorguid: number, sourceType: number
   return invoke('fetch_script_by_entry', { entryorguid, sourceType });
 }
 
+export interface TemplateEntry {
+  entry: number;
+  name: string;
+}
+
+export interface NameSearchResult {
+  entries: TemplateEntry[];
+  scripts: SmartScriptRow[];
+}
+
+export async function searchScriptsByName(name: string, sourceType: number): Promise<NameSearchResult> {
+  return invoke('search_scripts_by_name', { name, sourceType });
+}
+
 export async function insertScript(row: SmartScriptRow): Promise<string> {
   return invoke('insert_script', { row });
 }

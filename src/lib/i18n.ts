@@ -18,6 +18,9 @@ export const translations = {
     info: 'Info',
     searchScripts: 'Search Scripts',
     entryGuid: 'Entry / GUID',
+    searchByName: 'Search by Name',
+    searchMode: 'Search Mode',
+    namePlaceholder: 'Creature / GO name...',
     search: 'Search',
     newScript: 'New Script',
     trinityCoreEditor: 'TrinityCore SmartAI Editor',
@@ -78,6 +81,10 @@ export const translations = {
     loaded: 'Loaded',
     scriptsForEntry: 'scripts for entry',
     noScriptsExport: 'No scripts to export',
+    nameSearchNoResults: 'No scripts found for name',
+    nameSearchFound: 'Found',
+    nameSearchEntries: 'entries',
+    nameSearchScripts: 'scripts',
     sqlExported: 'SQL exported successfully',
     savedToDb: 'Saved',
     scriptsToDb: 'scripts to database',
@@ -118,14 +125,23 @@ export const translations = {
 
     // Language
     language: 'Language',
+    online: 'Online',
+    offline: 'Offline',
+    uploadToDb: 'Upload to DB',
+    syncScript: 'Sync Script',
+    theme: 'Theme',
+    dark: 'Dark',
+    light: 'Light',
 
     // Welcome - cached scripts
     recentScripts: 'Recent Scripts',
     noRecentScripts: 'No recent scripts',
     scriptCount: 'rows',
+    filter: 'Filter...',
 
     // Clean / clear
     clear: 'Clear',
+    open: 'Open',
     clearConfirm: 'You have active scripts. What would you like to do before clearing?',
     clearExportSql: 'Export SQL',
     clearSaveDb: 'Save to DB',
@@ -168,6 +184,9 @@ export const translations = {
     info: 'Info',
     searchScripts: 'Szkriptek keresése',
     entryGuid: 'Entry / GUID',
+    searchByName: 'Keresés névre',
+    searchMode: 'Keresés mód',
+    namePlaceholder: 'Creature / GO név...',
     search: 'Keresés',
     newScript: 'Új szkript',
     trinityCoreEditor: 'TrinityCore SmartAI Szerkesztő',
@@ -228,6 +247,10 @@ export const translations = {
     loaded: 'Betöltve',
     scriptsForEntry: 'szkript az entry-hez',
     noScriptsExport: 'Nincsenek exportálható szkriptek',
+    nameSearchNoResults: 'Nem található szkript a név alapján',
+    nameSearchFound: 'Találva',
+    nameSearchEntries: 'entry',
+    nameSearchScripts: 'szkript',
     sqlExported: 'SQL sikeresen exportálva',
     savedToDb: 'Mentve',
     scriptsToDb: 'szkript az adatbázisba',
@@ -268,14 +291,23 @@ export const translations = {
 
     // Language
     language: 'Nyelv',
+    online: 'Online',
+    offline: 'Offline',
+    uploadToDb: 'Feltöltés DB-be',
+    syncScript: 'Szinkronizálás',
+    theme: 'Téma',
+    dark: 'Sötét',
+    light: 'Világos',
 
     // Welcome - cached scripts
     recentScripts: 'Legutóbbi szkriptek',
     noRecentScripts: 'Nincsenek legutóbbi szkriptek',
     scriptCount: 'sor',
+    filter: 'Szűrés...',
 
     // Clean / clear
     clear: 'Törlés',
+    open: 'Megnyitás',
     clearConfirm: 'Aktív szkriptjeid vannak. Mit szeretnél tenni törlés előtt?',
     clearExportSql: 'SQL exportálása',
     clearSaveDb: 'Mentés DB-be',

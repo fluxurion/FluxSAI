@@ -83,6 +83,23 @@ pub struct ConditionRow {
     pub script_name: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, FromRow)]
+pub struct TemplateEntry {
+    pub entry: u32,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, FromRow)]
+pub struct GuidRow {
+    pub guid: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NameSearchResult {
+    pub entries: Vec<TemplateEntry>,
+    pub scripts: Vec<SmartScriptRow>,
+}
+
 fn get_pool(state: &tauri::State<'_, DbState>) -> Result<MySqlPool, String> {
     let guard = state.pool.lock().map_err(|e| format!("Lock error: {}", e))?;
     guard
@@ -188,6 +205,110 @@ pub async fn fetch_script_by_entry(
     state: tauri::State<'_, DbState>,
 ) -> Result<Vec<SmartScriptRow>, String> {
     fetch_scripts(Some(entryorguid), Some(source_type), state).await
+}
+
+#[tauri::command]
+pub async fn search_scripts_by_name(
+    name: String,
+    source_type: u8,
+    state: tauri::State<'_, DbState>,
+) -> Result<NameSearchResult, String> {
+    let pool = get_pool(&state)?;
+    let search_pattern = format!("%{}%", name);
+
+    let (template_table, instance_table) = match source_type {
+        0 => ("creature_template", "creature"),
+        1 => ("gameobject_template", "gameobject"),
+        _ => return Err("Name search is only supported for Creature (0) and GameObject (1) source types".to_string()),
+    };
+
+    // Step 1: Find template entries matching the name
+    let entries_sql = format!(
+        "SELECT entry, name FROM {} WHERE name LIKE ? ORDER BY entry LIMIT 100",
+        template_table
+    );
+    let entries: Vec<TemplateEntry> = sqlx::query_as::<_, TemplateEntry>(&entries_sql)
+        .bind(&search_pattern)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| format!("Query failed: {}", e))?;
+
+    if entries.is_empty() {
+        return Ok(NameSearchResult { entries: vec![], scripts: vec![] });
+    }
+
+    let entry_ids: Vec<u32> = entries.iter().map(|e| e.entry).collect();
+    let placeholders = entry_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+
+    // Step 2: Search smart_scripts for positive entryorguid = entry
+    let scripts_sql = format!(
+        "SELECT entryorguid, source_type, id, link, event_type, event_phase_mask, event_chance, event_flags, \
+         event_param1, event_param2, event_param3, event_param4, event_param5, event_param_string, \
+         action_type, action_param1, action_param2, action_param3, action_param4, action_param5, action_param6, \
+         target_type, target_param1, target_param2, target_param3, target_x, target_y, target_z, target_o, comment \
+         FROM smart_scripts WHERE entryorguid IN ({}) AND source_type = ? ORDER BY entryorguid, id",
+        placeholders
+    );
+
+    let mut q = sqlx::query_as::<_, SmartScriptRow>(&scripts_sql);
+    for id in &entry_ids {
+        q = q.bind(*id as i64);
+    }
+    q = q.bind(source_type);
+
+    let scripts: Vec<SmartScriptRow> = q
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| format!("Query failed: {}", e))?;
+
+    if !scripts.is_empty() {
+        return Ok(NameSearchResult { entries, scripts });
+    }
+
+    // Step 3: No entry-based scripts found — look up guids from instance table
+    let guid_sql = format!(
+        "SELECT guid FROM {} WHERE id IN ({})",
+        instance_table, placeholders
+    );
+
+    let mut gq = sqlx::query_as::<_, GuidRow>(&guid_sql);
+    for id in &entry_ids {
+        gq = gq.bind(*id);
+    }
+
+    let guids: Vec<GuidRow> = gq
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| format!("Query failed: {}", e))?;
+
+    if guids.is_empty() {
+        return Ok(NameSearchResult { entries, scripts: vec![] });
+    }
+
+    // Step 4: Search smart_scripts for negative entryorguid = -guid
+    let guid_values: Vec<u32> = guids.iter().map(|g| g.guid).collect();
+    let guid_placeholders = guid_values.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let guid_scripts_sql = format!(
+        "SELECT entryorguid, source_type, id, link, event_type, event_phase_mask, event_chance, event_flags, \
+         event_param1, event_param2, event_param3, event_param4, event_param5, event_param_string, \
+         action_type, action_param1, action_param2, action_param3, action_param4, action_param5, action_param6, \
+         target_type, target_param1, target_param2, target_param3, target_x, target_y, target_z, target_o, comment \
+         FROM smart_scripts WHERE entryorguid IN ({}) AND source_type = ? ORDER BY entryorguid, id",
+        guid_placeholders
+    );
+
+    let mut gq2 = sqlx::query_as::<_, SmartScriptRow>(&guid_scripts_sql);
+    for guid in &guid_values {
+        gq2 = gq2.bind(-(*guid as i64));
+    }
+    gq2 = gq2.bind(source_type);
+
+    let guid_scripts: Vec<SmartScriptRow> = gq2
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| format!("Query failed: {}", e))?;
+
+    Ok(NameSearchResult { entries, scripts: guid_scripts })
 }
 
 #[tauri::command]

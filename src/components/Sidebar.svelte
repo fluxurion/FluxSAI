@@ -2,16 +2,40 @@
   import { SMART_SCRIPT_TYPES } from '../lib/types';
   import { t, type Lang, type TranslationKey } from '../lib/i18n';
 
-  let { entryorguid = $bindable(0), sourceType = $bindable(0), onSearch, onNew, connected = false, onConnectClick, lang = 'en', onLangChange, saveMode = $bindable('auto' as 'manual' | 'auto'), uiStyle = $bindable('compact' as 'classic' | 'compact') } = $props();
+  let { entryorguid = $bindable(0), sourceType = $bindable(0), onSearch, onNameSearch, onNew, connected = false, onConnectClick, lang = 'en' as Lang, onLangChange, saveMode = $bindable('auto' as 'manual' | 'auto'), uiStyle = $bindable('compact' as 'classic' | 'compact'), theme = 'dark' as 'dark' | 'light', onThemeChange } = $props();
 
   let searchEntry = $state('');
+  let searchName = $state('');
   let searchType = $state(0);
+  let searchMode = $state<'entry' | 'name'>('entry');
+
+  const NAME_SEARCH_TYPES = SMART_SCRIPT_TYPES.filter(t2 => t2.value === 0 || t2.value === 1);
+
+  const DB_CONFIG_KEY = 'fluxsai_db_config';
+
+  let hasDbConfig = $derived(() => {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+      const raw = localStorage.getItem(DB_CONFIG_KEY);
+      return raw !== null && raw.length > 0;
+    } catch {
+      return false;
+    }
+  });
 
   function tr(key: TranslationKey): string {
     return t(lang, key);
   }
 
   function handleSearch() {
+    if (searchMode === 'name') {
+      if (searchName.trim()) {
+        if (searchType > 1) searchType = 0;
+        sourceType = searchType;
+        onNameSearch?.(searchName.trim(), searchType);
+      }
+      return;
+    }
     const entry = parseInt(searchEntry);
     if (!isNaN(entry)) {
       entryorguid = entry;
@@ -34,10 +58,17 @@
 
   <div class="sidebar-section">
     <div class="section-title">{tr('database')}</div>
-    <button class="db-status-btn" class:connected onclick={onConnectClick}>
-      <span class="db-dot" class:connected></span>
-      {connected ? tr('connected') : tr('disconnected')}
-    </button>
+    <div class="db-controls">
+      <button class="db-status-btn" class:connected onclick={onConnectClick} disabled={!hasDbConfig && !connected}>
+        <span class="db-dot" class:connected></span>
+        {connected ? tr('connected') : tr('disconnected')}
+      </button>
+      {#if !connected}
+        <button class="connect-btn" onclick={onConnectClick} disabled={!hasDbConfig}>
+          {tr('connect')}
+        </button>
+      {/if}
+    </div>
   </div>
 
   <div class="sidebar-section">
@@ -57,22 +88,52 @@
   </div>
 
   <div class="sidebar-section">
+    <div class="section-title">{tr('theme')}</div>
+    <div class="save-mode-switcher">
+      <button class="save-mode-btn" class:active={theme === 'dark'} onclick={() => onThemeChange?.('dark')}>{tr('dark')}</button>
+      <button class="save-mode-btn" class:active={theme === 'light'} onclick={() => onThemeChange?.('light')}>{tr('light')}</button>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
     <div class="section-title">{tr('searchScripts')}</div>
-    <div class="search-row">
-      <input
-        type="text"
-        placeholder={tr('entryGuid')}
-        bind:value={searchEntry}
-        onkeydown={(e) => e.key === 'Enter' && handleSearch()}
-      />
+    <div class="save-mode-switcher">
+      <button class="save-mode-btn" class:active={searchMode === 'entry'} onclick={() => searchMode = 'entry'}>{tr('entryGuid')}</button>
+      <button class="save-mode-btn" class:active={searchMode === 'name'} onclick={() => searchMode = 'name'}>{tr('searchByName')}</button>
     </div>
-    <div class="search-row">
-      <select bind:value={searchType}>
-        {#each SMART_SCRIPT_TYPES as t2}
-          <option value={t2.value}>{t2.label}</option>
-        {/each}
-      </select>
-    </div>
+    {#if searchMode === 'entry'}
+      <div class="search-row">
+        <input
+          type="text"
+          placeholder={tr('entryGuid')}
+          bind:value={searchEntry}
+          onkeydown={(e) => e.key === 'Enter' && handleSearch()}
+        />
+      </div>
+      <div class="search-row">
+        <select bind:value={searchType}>
+          {#each SMART_SCRIPT_TYPES as t2}
+            <option value={t2.value}>{t2.label}</option>
+          {/each}
+        </select>
+      </div>
+    {:else}
+      <div class="search-row">
+        <input
+          type="text"
+          placeholder={tr('namePlaceholder')}
+          bind:value={searchName}
+          onkeydown={(e) => e.key === 'Enter' && handleSearch()}
+        />
+      </div>
+      <div class="search-row">
+        <select bind:value={searchType}>
+          {#each NAME_SEARCH_TYPES as t2}
+            <option value={t2.value}>{t2.label}</option>
+          {/each}
+        </select>
+      </div>
+    {/if}
     <button class="btn-primary sidebar-btn" onclick={handleSearch}>
       {tr('search')}
     </button>
@@ -161,6 +222,12 @@
     font-weight: 600;
   }
 
+  .db-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
   .db-status-btn {
     display: flex;
     align-items: center;
@@ -195,6 +262,29 @@
   .db-dot.connected {
     background: var(--accent-green);
     box-shadow: 0 0 8px rgba(63, 185, 80, 0.5);
+  }
+
+  .connect-btn {
+    width: 100%;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(188, 140, 255, 0.2));
+    border: 1px solid rgba(88, 166, 255, 0.3);
+    border-radius: var(--radius-sm);
+    color: var(--accent-blue);
+    font-size: 13px;
+    font-weight: 600;
+    transition: var(--transition);
+  }
+
+  .connect-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.3), rgba(188, 140, 255, 0.3));
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 12px rgba(88, 166, 255, 0.3);
+  }
+
+  .connect-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .search-row {

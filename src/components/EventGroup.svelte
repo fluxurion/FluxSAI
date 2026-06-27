@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { SmartScriptRow, ConditionRow } from '../lib/api';
   import { SMART_EVENTS, SMART_EVENT_FLAGS } from '../lib/types';
-  import { getEventParams, getEventParamString, getEventLabel, type EventGroup as EventGroupData } from '../lib/paramMeta';
+  import { getEventParams, getEventParamString, getEventLabel, getActionLabel, type EventGroup as EventGroupData } from '../lib/paramMeta';
   import { getEventTooltip, getEventFlagTooltip } from '../lib/tooltips';
   import { t, type TranslationKey, type Lang } from '../lib/i18n';
   import ActionCard from './ActionCard.svelte';
@@ -26,6 +26,12 @@
     uiStyle = 'compact' as 'classic' | 'compact',
     connected = false,
     expanded = true,
+    selectedEventIds = new Set<string>(),
+    onToggleSelect,
+    onDragStart,
+    onDragOver,
+    onDrop,
+    onDragEnd,
   } = $props();
 
   let showFlagsPopup = $state(false);
@@ -49,6 +55,8 @@
     c.SourceId === firstRow?.source_type &&
     c.SourceEntry === firstRow?.entryorguid
   ));
+
+  let isSelected = $derived(selectedEventIds.has(group.eventId));
 
   function tr(key: TranslationKey): string {
     return t(lang, key);
@@ -124,10 +132,23 @@
   }
 </script>
 
-<div class="event-group glass-event fade-in" class:expanded={internalExpanded}>
+<div 
+  class="event-group glass-event fade-in" 
+  class:expanded={internalExpanded} 
+  class:selected={isSelected}
+  draggable={true}
+  ondragstart={(e) => onDragStart?.(e, group.eventId)}
+  ondragover={(e) => onDragOver?.(e, group.eventId)}
+  ondrop={(e) => onDrop?.(e, group.eventId)}
+  ondragend={onDragEnd}
+>
   <div class="group-header" role="button" tabindex="0" onclick={toggleExpanded} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleExpanded()}>
+    <input type="checkbox" class="event-checkbox" checked={isSelected} onclick={(e) => { e.stopPropagation(); onToggleSelect?.(group.eventId); }} />
     <span class="expand-icon" class:rotated={internalExpanded}>v</span>
     <span class="badge badge-blue" title={eventTooltip}>{getEventLabel(group.eventType)}</span>
+    {#each group.rows as ri (ri)}
+      <span class="badge badge-purple">{getActionLabel(scripts[ri].action_type)}</span>
+    {/each}
     <span class="group-info">
       {group.rows.length} {tr('actions').toLowerCase()}
     </span>
@@ -333,8 +354,34 @@
     border-left: 3px solid rgba(88, 166, 255, 0.25);
   }
 
+  .event-group.selected {
+    border-left-color: var(--accent-purple);
+    background: rgba(188, 140, 255, 0.05);
+  }
+
   .event-group:hover {
     border-left-color: rgba(88, 166, 255, 0.45);
+  }
+
+  .event-group.selected:hover {
+    border-left-color: var(--accent-purple);
+  }
+
+  .event-group.dragging {
+    opacity: 0.5;
+  }
+
+  .event-group.drag-over {
+    border-left-color: var(--accent-green);
+    background: rgba(63, 185, 80, 0.05);
+  }
+
+  .event-checkbox {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    margin-right: 6px;
+    accent-color: var(--accent-purple);
   }
 
   .group-header {
@@ -351,9 +398,10 @@
   }
 
   .group-info {
-    flex: 1;
     font-size: 12px;
     color: var(--text-secondary);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .group-actions {

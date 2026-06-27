@@ -435,6 +435,7 @@ export interface SmartScriptRow {
   target_z: number;
   target_o: number;
   comment: string;
+  eventId?: number;
 }
 
 export interface ConditionRow {
