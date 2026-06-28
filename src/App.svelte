@@ -3,6 +3,7 @@
   import EventGroup from './components/EventGroup.svelte';
   import SqlPreview from './components/SqlPreview.svelte';
   import DbModal from './components/DbModal.svelte';
+  import OptionsModal from './components/OptionsModal.svelte';
   import ImportModal from './components/ImportModal.svelte';
   import type { SmartScriptRow, ConditionRow, DbConfig, NameSearchResult } from './lib/api';
   import * as api from './lib/api';
@@ -136,6 +137,7 @@
   let conditions = $state<ConditionRow[]>([]);
   let connected = $state(false);
   let showDbModal = $state(false);
+  let showOptionsModal = $state(false);
   let activeTab = $state<'editor' | 'sql'>('editor');
   let saveMode = $state<'manual' | 'auto'>(
     (localStorage.getItem('fluxsai_save_mode') as 'manual' | 'auto') ?? 'auto'
@@ -706,6 +708,7 @@
     // Escape: Close modals
     if (e.key === 'Escape') {
       if (showDbModal) showDbModal = false;
+      if (showOptionsModal) showOptionsModal = false;
       if (showNewScriptModal) showNewScriptModal = false;
       if (showClearModal) showClearModal = false;
       return;
@@ -907,11 +910,7 @@
       onNameSearch={handleNameSearch}
       onNew={handleAddRow}
       {lang}
-      onLangChange={handleLangChange}
-      bind:saveMode
-      bind:uiStyle
-      {theme}
-      onThemeChange={handleThemeChange}
+      onOptions={() => showOptionsModal = true}
     />
   </div>
 
@@ -1182,6 +1181,9 @@
 
 {#if showDbModal}
   <DbModal onConnect={handleConnect} onClose={() => showDbModal = false} {lang} />
+{/if}
+{#if showOptionsModal}
+  <OptionsModal onClose={() => showOptionsModal = false} {lang} onLangChange={handleLangChange} bind:saveMode bind:uiStyle {theme} onThemeChange={handleThemeChange} />
 {/if}
 {#if showImportModal}
   <ImportModal onImport={handleImport} onClose={() => showImportModal = false} {connected} {lang} />

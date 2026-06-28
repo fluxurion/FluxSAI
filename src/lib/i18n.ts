@@ -167,6 +167,9 @@ export const translations = {
     unsavedConditions: 'You have unsaved conditions. Are you sure you want to close?',
     confirmClose: 'Confirm Close',
     addAnotherCondition: 'Add Another Condition',
+
+    // OptionsModal
+    options: 'Options',
   },
   hu: {
     // Sidebar
@@ -331,6 +334,9 @@ export const translations = {
     conditionsSaved: 'Conditionök mentve az adatbázisba',
     conditionDeleted: 'Condition törölve',
     deleteCondition: 'Condition törlése az adatbázisból?',
+
+    // OptionsModal
+    options: 'Beállítások',
     unsavedConditions: 'Mentetlen conditionök vannak. Biztosan bezárod?',
     confirmClose: 'Bezárás megerősítése',
     addAnotherCondition: 'Még Egy Feltétel Hozzáadása',

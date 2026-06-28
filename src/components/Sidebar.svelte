@@ -2,7 +2,7 @@
   import { SMART_SCRIPT_TYPES } from '../lib/types';
   import { t, type Lang, type TranslationKey } from '../lib/i18n';
 
-  let { entryorguid = $bindable(0), sourceType = $bindable(0), onSearch, onNameSearch, onNew, connected = false, onConnectClick, lang = 'en' as Lang, onLangChange, saveMode = $bindable('auto' as 'manual' | 'auto'), uiStyle = $bindable('compact' as 'classic' | 'compact'), theme = 'dark' as 'dark' | 'light', onThemeChange } = $props();
+  let { entryorguid = $bindable(0), sourceType = $bindable(0), onSearch, onNameSearch, onNew, connected = false, onConnectClick, lang = 'en' as Lang, onOptions } = $props();
 
   let searchEntry = $state('');
   let searchName = $state('');
@@ -50,10 +50,9 @@
     <div class="logo">
       <span class="logo-icon">FluxSAI</span>
     </div>
-    <div class="version-info">
-      <div class="version">v0.1.0</div>
-      <div class="emulator-version">AzeriteCore 8.3.7</div>
-    </div>
+    <button class="options-btn" onclick={onOptions} title={tr('options')}>
+      ⚙
+    </button>
   </div>
 
   <div class="sidebar-section">
@@ -68,30 +67,6 @@
           {tr('connect')}
         </button>
       {/if}
-    </div>
-  </div>
-
-  <div class="sidebar-section">
-    <div class="section-title">{tr('saveMode')}</div>
-    <div class="save-mode-switcher">
-      <button class="save-mode-btn" class:active={saveMode === 'manual'} onclick={() => { saveMode = 'manual'; localStorage.setItem('fluxsai_save_mode', 'manual'); }}>{tr('manual')}</button>
-      <button class="save-mode-btn" class:active={saveMode === 'auto'} onclick={() => { saveMode = 'auto'; localStorage.setItem('fluxsai_save_mode', 'auto'); }}>{tr('auto')}</button>
-    </div>
-  </div>
-
-  <div class="sidebar-section">
-    <div class="section-title">{tr('uiStyle')}</div>
-    <div class="save-mode-switcher">
-      <button class="save-mode-btn" class:active={uiStyle === 'compact'} onclick={() => { uiStyle = 'compact'; localStorage.setItem('fluxsai_ui_style', 'compact'); }}>{tr('compact')}</button>
-      <button class="save-mode-btn" class:active={uiStyle === 'classic'} onclick={() => { uiStyle = 'classic'; localStorage.setItem('fluxsai_ui_style', 'classic'); }}>{tr('classic')}</button>
-    </div>
-  </div>
-
-  <div class="sidebar-section">
-    <div class="section-title">{tr('theme')}</div>
-    <div class="save-mode-switcher">
-      <button class="save-mode-btn" class:active={theme === 'dark'} onclick={() => onThemeChange?.('dark')}>{tr('dark')}</button>
-      <button class="save-mode-btn" class:active={theme === 'light'} onclick={() => onThemeChange?.('light')}>{tr('light')}</button>
     </div>
   </div>
 
@@ -142,14 +117,6 @@
     </button>
   </div>
 
-  <div class="sidebar-section lang-section">
-    <div class="section-title">{tr('language')}</div>
-    <div class="lang-switcher">
-      <button class="lang-btn" class:active={lang === 'en'} onclick={() => onLangChange?.('en')}>EN</button>
-      <button class="lang-btn" class:active={lang === 'hu'} onclick={() => onLangChange?.('hu')}>HU</button>
-    </div>
-  </div>
-
   <div class="sidebar-footer">
     <div class="footer-text">{tr('trinityCoreEditor')}</div>
   </div>
@@ -190,22 +157,23 @@
     filter: drop-shadow(0 0 6px rgba(188, 140, 255, 0.5));
   }
 
-  .version {
-    font-size: 10px;
+  .options-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
     color: var(--text-muted);
-  }
-
-  .version-info {
+    font-size: 16px;
+    width: 30px;
+    height: 30px;
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
   }
 
-  .emulator-version {
-    font-size: 9px;
+  .options-btn:hover {
+    border-color: var(--accent-blue);
     color: var(--accent-blue);
-    opacity: 0.7;
   }
 
   .sidebar-section {
@@ -316,40 +284,6 @@
     border-color: var(--accent-blue);
     box-shadow: 0 0 20px rgba(88, 166, 255, 0.5);
     transform: translateY(-1px);
-  }
-
-  .lang-section {
-    margin-top: auto;
-    padding-top: 24px;
-  }
-
-  .lang-switcher {
-    display: flex;
-    gap: 4px;
-    background: rgba(10, 14, 20, 0.6);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    padding: 3px;
-  }
-
-  .lang-btn {
-    flex: 1;
-    background: transparent;
-    color: var(--text-muted);
-    padding: 5px 10px;
-    font-size: 12px;
-    font-weight: 600;
-    border-radius: 4px;
-    transition: var(--transition);
-  }
-
-  .lang-btn.active {
-    background: rgba(88, 166, 255, 0.15);
-    color: var(--accent-blue);
-  }
-
-  .lang-btn:hover:not(.active) {
-    color: var(--text-primary);
   }
 
   .save-mode-switcher {
