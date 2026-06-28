@@ -2,7 +2,7 @@
   import { SMART_SCRIPT_TYPES } from '../lib/types';
   import { t, type Lang, type TranslationKey } from '../lib/i18n';
 
-  let { entryorguid = $bindable(0), sourceType = $bindable(0), onSearch, onNameSearch, onNew, connected = false, onConnectClick, lang = 'en' as Lang, onOptions } = $props();
+  let { entryorguid = $bindable(0), sourceType = $bindable(0), onSearch, onNameSearch, onNew, connected = false, onConnectClick, lang = 'en' as Lang, onOptions, onCollapse } = $props();
 
   let searchEntry = $state('');
   let searchName = $state('');
@@ -50,9 +50,16 @@
     <div class="logo">
       <span class="logo-icon">FluxSAI</span>
     </div>
-    <button class="options-btn" onclick={onOptions} title={tr('options')}>
-      ⚙
-    </button>
+    <div class="header-buttons">
+      <button class="options-btn" onclick={onOptions} title={tr('options')}>
+        ⚙
+      </button>
+      {#if onCollapse}
+        <button class="options-btn" onclick={onCollapse} title="{tr('close')}">
+          ✕
+        </button>
+      {/if}
+    </div>
   </div>
 
   <div class="sidebar-section">
@@ -155,6 +162,11 @@
     font-weight: 800;
     color: var(--accent-purple);
     filter: drop-shadow(0 0 6px rgba(188, 140, 255, 0.5));
+  }
+
+  .header-buttons {
+    display: flex;
+    gap: 6px;
   }
 
   .options-btn {

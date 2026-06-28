@@ -917,15 +917,16 @@
       onNew={handleAddRow}
       {lang}
       onOptions={() => showOptionsModal = true}
+      onCollapse={() => sidebarCollapsed = true}
     />
   </div>
 
   <div class="main-area">
     <div class="top-bar glass">
       <div class="top-bar-left">
-        {#if scripts.length > 0}
-          <button class="sidebar-toggle" onclick={() => sidebarCollapsed = !sidebarCollapsed} title="Toggle sidebar">
-            {sidebarCollapsed ? '\u2630' : '\u2715'}
+        {#if sidebarCollapsed && scripts.length > 0}
+          <button class="sidebar-toggle" onclick={() => sidebarCollapsed = false} title="Toggle sidebar">
+            ☰
           </button>
         {/if}
         {#if currentEntry !== 0}
