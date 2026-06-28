@@ -469,3 +469,179 @@ pub async fn delete_conditions_for_smart_event(
     Ok("Conditions deleted successfully".to_string())
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ParseResult {
+    pub scripts: Vec<SmartScriptRow>,
+    pub conditions: Vec<ConditionRow>,
+}
+
+#[tauri::command]
+pub fn parse_sql(sql: String) -> Result<ParseResult, String> {
+    let mut scripts = Vec::new();
+    let mut conditions = Vec::new();
+
+    for line in sql.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with("--") || line.starts_with("#") {
+            continue;
+        }
+
+        if line.to_uppercase().starts_with("INSERT INTO `smart_scripts`") {
+            match parse_smart_script_insert(line) {
+                Ok(script) => scripts.push(script),
+                Err(e) => eprintln!("Failed to parse script: {}", e),
+            }
+        } else if line.to_uppercase().starts_with("INSERT INTO `conditions`") {
+            match parse_condition_insert(line) {
+                Ok(condition) => conditions.push(condition),
+                Err(e) => eprintln!("Failed to parse condition: {}", e),
+            }
+        }
+    }
+
+    Ok(ParseResult { scripts, conditions })
+}
+
+fn parse_smart_script_insert(line: &str) -> Result<SmartScriptRow, String> {
+    // Simple regex-based parser for INSERT statements
+    // This is a simplified version - production code should use a proper SQL parser
+    let values_start = line.find('(').ok_or("No opening parenthesis")?;
+    let values_str = &line[values_start..];
+
+    // Extract values between parentheses
+    let values: Vec<&str> = values_str
+        .split(|c: char| c == '(' || c == ')')
+        .skip(1)
+        .take_while(|s| !s.is_empty())
+        .collect();
+
+    if values.is_empty() {
+        return Err("No values found".to_string());
+    }
+
+    let values_str = values[0];
+    let value_strs: Vec<&str> = values_str
+        .split(',')
+        .map(|s| s.trim().trim_matches('\''))
+        .collect();
+
+    if value_strs.len() < 20 {
+        return Err(format!("Expected at least 20 values, got {}", value_strs.len()));
+    }
+
+    let parse_u32 = |idx: usize| -> Result<u32, String> {
+        value_strs[idx].parse().map_err(|_| format!("Invalid u32 at index {}", idx))
+    };
+
+    let parse_i64 = |idx: usize| -> Result<i64, String> {
+        value_strs[idx].parse().map_err(|_| format!("Invalid i64 at index {}", idx))
+    };
+
+    let parse_u8 = |idx: usize| -> Result<u8, String> {
+        value_strs[idx].parse().map_err(|_| format!("Invalid u8 at index {}", idx))
+    };
+
+    let parse_u16 = |idx: usize| -> Result<u16, String> {
+        value_strs[idx].parse().map_err(|_| format!("Invalid u16 at index {}", idx))
+    };
+
+    let parse_f32 = |idx: usize| -> Result<f32, String> {
+        value_strs[idx].parse().map_err(|_| format!("Invalid f32 at index {}", idx))
+    };
+
+    Ok(SmartScriptRow {
+        entryorguid: parse_i64(0)?,
+        source_type: parse_u8(1)?,
+        id: parse_u16(2)?,
+        link: parse_u16(3)?,
+        event_type: parse_u8(4)?,
+        event_phase_mask: parse_u8(5)?,
+        event_chance: parse_u8(6)?,
+        event_flags: parse_u16(7)?,
+        event_param1: parse_u32(8)?,
+        event_param2: parse_u32(9)?,
+        event_param3: parse_u32(10)?,
+        event_param4: parse_u32(11)?,
+        event_param5: parse_u32(12)?,
+        event_param_string: value_strs[13].to_string(),
+        action_type: parse_u8(14)?,
+        action_param1: parse_u32(15)?,
+        action_param2: parse_u32(16)?,
+        action_param3: parse_u32(17)?,
+        action_param4: parse_u32(18)?,
+        action_param5: parse_u32(19)?,
+        action_param6: parse_u32(20)?,
+        target_type: parse_u8(21)?,
+        target_param1: parse_u32(22)?,
+        target_param2: parse_u32(23)?,
+        target_param3: parse_u32(24)?,
+        target_x: if value_strs.len() > 25 { parse_f32(25).unwrap_or(0.0) } else { 0.0 },
+        target_y: if value_strs.len() > 26 { parse_f32(26).unwrap_or(0.0) } else { 0.0 },
+        target_z: if value_strs.len() > 27 { parse_f32(27).unwrap_or(0.0) } else { 0.0 },
+        target_o: if value_strs.len() > 28 { parse_f32(28).unwrap_or(0.0) } else { 0.0 },
+        comment: if value_strs.len() > 29 { value_strs[29].to_string() } else { String::new() },
+    })
+}
+
+fn parse_condition_insert(line: &str) -> Result<ConditionRow, String> {
+    let values_start = line.find('(').ok_or("No opening parenthesis")?;
+    let values_str = &line[values_start..];
+
+    let values: Vec<&str> = values_str
+        .split(|c: char| c == '(' || c == ')')
+        .skip(1)
+        .take_while(|s| !s.is_empty())
+        .collect();
+
+    if values.is_empty() {
+        return Err("No values found".to_string());
+    }
+
+    let values_str = values[0];
+    let value_strs: Vec<&str> = values_str
+        .split(',')
+        .map(|s| s.trim().trim_matches('\''))
+        .collect();
+
+    if value_strs.len() < 14 {
+        return Err(format!("Expected at least 14 values, got {}", value_strs.len()));
+    }
+
+    let parse_i32 = |idx: usize| -> Result<i32, String> {
+        value_strs[idx].parse().map_err(|_| format!("Invalid i32 at index {}", idx))
+    };
+
+    let parse_u32 = |idx: usize| -> Result<u32, String> {
+        value_strs[idx].parse().map_err(|_| format!("Invalid u32 at index {}", idx))
+    };
+
+    let parse_u8 = |idx: usize| -> Result<u8, String> {
+        value_strs[idx].parse().map_err(|_| format!("Invalid u8 at index {}", idx))
+    };
+
+    let parse_bool = |idx: usize| -> Result<bool, String> {
+        match value_strs[idx].to_lowercase().as_str() {
+            "1" | "true" => Ok(true),
+            "0" | "false" => Ok(false),
+            _ => Err(format!("Invalid bool at index {}", idx)),
+        }
+    };
+
+    Ok(ConditionRow {
+        source_type_or_reference_id: parse_i32(0)?,
+        source_group: parse_u32(1)?,
+        source_entry: parse_i32(2)?,
+        source_id: parse_u32(3)?,
+        else_group: parse_u32(4)?,
+        condition_type_or_reference: parse_i32(5)?,
+        condition_target: parse_u8(6)?,
+        condition_value1: parse_u32(7)?,
+        condition_value2: parse_u32(8)?,
+        condition_value3: parse_u32(9)?,
+        negative_condition: parse_bool(10)?,
+        error_type: parse_u32(11)?,
+        error_text_id: parse_u32(12)?,
+        script_name: if value_strs.len() > 13 { value_strs[13].to_string() } else { String::new() },
+    })
+}
+

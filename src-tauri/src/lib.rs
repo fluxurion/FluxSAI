@@ -23,6 +23,7 @@ pub fn run() {
             db::fetch_all_conditions_for_entry,
             db::insert_condition,
             db::delete_conditions_for_smart_event,
+            db::parse_sql,
             sql_gen::export_scripts_sql,
             sql_gen::save_entry_to_file,
         ])

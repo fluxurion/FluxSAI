@@ -132,6 +132,7 @@ export const translations = {
     theme: 'Theme',
     dark: 'Dark',
     light: 'Light',
+    import: 'Import',
 
     // Welcome - cached scripts
     recentScripts: 'Recent Scripts',
@@ -298,6 +299,7 @@ export const translations = {
     theme: 'Téma',
     dark: 'Sötét',
     light: 'Világos',
+    import: 'Import',
 
     // Welcome - cached scripts
     recentScripts: 'Legutóbbi szkriptek',

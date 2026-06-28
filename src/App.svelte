@@ -3,6 +3,7 @@
   import EventGroup from './components/EventGroup.svelte';
   import SqlPreview from './components/SqlPreview.svelte';
   import DbModal from './components/DbModal.svelte';
+  import ImportModal from './components/ImportModal.svelte';
   import type { SmartScriptRow, ConditionRow, DbConfig, NameSearchResult } from './lib/api';
   import * as api from './lib/api';
   import { createEmptyScriptRow, createEmptyConditionRow, SMART_SCRIPT_TYPES } from './lib/types';
@@ -179,6 +180,9 @@
 
   // Drag and drop for event reordering
   let draggedEventId = $state<string | null>(null);
+
+  // Import modal
+  let showImportModal = $state(false);
 
   let eventGroups = $derived(groupByEvent(scripts));
 
@@ -836,9 +840,10 @@
   }
 
   function handleDragOver(e: DragEvent, eventId: string) {
-    e.preventDefault();
     if (draggedEventId && draggedEventId !== eventId) {
-      e.dataTransfer!.dropEffect = 'move';
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
     }
   }
 
@@ -877,6 +882,19 @@
 
   function handleDragEnd() {
     draggedEventId = null;
+  }
+
+  async function handleImport(importedScripts: SmartScriptRow[], importedConditions: ConditionRow[]) {
+    addToHistory();
+    scripts = importedScripts;
+    conditions = importedConditions;
+    currentEntry = importedScripts[0]?.entryorguid ?? 0;
+    currentSourceType = importedScripts[0]?.source_type ?? 0;
+    currentIsOnline = false;
+    history = [[...importedScripts]];
+    historyIndex = 0;
+    showStatus(`Imported ${importedScripts.length} scripts and ${importedConditions.length} conditions`, 'success');
+    showImportModal = false;
   }
 </script>
 
@@ -933,8 +951,11 @@
         <button class="btn-primary" onclick={handleSaveAll} disabled={!connected || scripts.length === 0}>
           {tr('saveToDb')}
         </button>
-        <button class="btn-ghost" onclick={handleExport} disabled={scripts.length === 0}>
-          {tr('export')}
+        <button class="btn-import" onclick={() => showImportModal = true}>
+          📥 {tr('import')}
+        </button>
+        <button class="btn-export" onclick={handleExport} disabled={scripts.length === 0}>
+          📤 {tr('export')}
         </button>
         <button class="btn-danger" onclick={handleDeleteFromDb} disabled={!connected || scripts.length === 0}>
           {tr('delete')}
@@ -1161,6 +1182,9 @@
 
 {#if showDbModal}
   <DbModal onConnect={handleConnect} onClose={() => showDbModal = false} {lang} />
+{/if}
+{#if showImportModal}
+  <ImportModal onImport={handleImport} onClose={() => showImportModal = false} {connected} {lang} />
 {/if}
 
 {#if showNewScriptModal}
@@ -1952,6 +1976,50 @@
     background: linear-gradient(135deg, rgba(63, 185, 80, 0.3), rgba(88, 166, 255, 0.3));
     border-color: var(--accent-green);
     box-shadow: 0 0 12px rgba(63, 185, 80, 0.3);
+  }
+
+  .btn-import {
+    background: linear-gradient(135deg, rgba(63, 185, 80, 0.15), rgba(63, 185, 80, 0.05));
+    border: 1px solid rgba(63, 185, 80, 0.3);
+    color: var(--accent-green);
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .btn-import:hover {
+    background: linear-gradient(135deg, rgba(63, 185, 80, 0.3), rgba(63, 185, 80, 0.15));
+    border-color: var(--accent-green);
+    box-shadow: 0 0 12px rgba(63, 185, 80, 0.3);
+    color: var(--text-primary);
+  }
+
+  .btn-export {
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.15), rgba(88, 166, 255, 0.05));
+    border: 1px solid rgba(88, 166, 255, 0.3);
+    color: var(--accent-blue);
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .btn-export:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.3), rgba(88, 166, 255, 0.15));
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 12px rgba(88, 166, 255, 0.3);
+    color: var(--text-primary);
   }
 
   .sql-tab {

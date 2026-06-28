@@ -38,6 +38,8 @@
   let internalExpanded = $state(false);
   let showConditionsPanel = $state(false);
   let showAdvanced = $state(false);
+  let isDragging = $state(false);
+  let isDragOver = $state(false);
 
   $effect(() => { internalExpanded = expanded; });
 
@@ -136,11 +138,15 @@
   class="event-group glass-event fade-in" 
   class:expanded={internalExpanded} 
   class:selected={isSelected}
+  class:dragging={isDragging}
+  class:drag-over={isDragOver}
+  role="group"
   draggable={true}
-  ondragstart={(e) => onDragStart?.(e, group.eventId)}
-  ondragover={(e) => onDragOver?.(e, group.eventId)}
-  ondrop={(e) => onDrop?.(e, group.eventId)}
-  ondragend={onDragEnd}
+  ondragstart={(e) => { isDragging = true; onDragStart?.(e, group.eventId); }}
+  ondragover={(e) => { e.preventDefault(); isDragOver = true; onDragOver?.(e, group.eventId); }}
+  ondragleave={() => { isDragOver = false; }}
+  ondrop={(e) => { isDragOver = false; onDrop?.(e, group.eventId); }}
+  ondragend={() => { isDragging = false; onDragEnd?.(); }}
 >
   <div class="group-header" role="button" tabindex="0" onclick={toggleExpanded} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleExpanded()}>
     <input type="checkbox" class="event-checkbox" checked={isSelected} onclick={(e) => { e.stopPropagation(); onToggleSelect?.(group.eventId); }} />
