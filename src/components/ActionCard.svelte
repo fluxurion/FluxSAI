@@ -420,6 +420,11 @@
     min-height: 28px;
   }
 
+  .compact-header :global(.ss-container) {
+    flex: 1 1 160px;
+    min-width: 120px;
+  }
+
   .compact-arrow {
     color: var(--accent-blue);
     font-size: 12px;
