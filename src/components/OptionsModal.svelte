@@ -70,7 +70,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--overlay-bg);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -84,6 +84,9 @@
     max-width: 90vw;
     display: flex;
     flex-direction: column;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
     box-shadow: var(--shadow-pop);
   }
 

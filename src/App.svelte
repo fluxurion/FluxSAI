@@ -241,6 +241,12 @@
     theme = getStoredTheme();
   });
 
+  $effect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('theme-light', theme === 'light');
+    }
+  });
+
   function handleLangChange(newLang: Lang) {
     lang = newLang;
     storeLang(newLang);
@@ -901,7 +907,7 @@
   }
 </script>
 
-<div class="app-container" class:sidebar-collapsed={sidebarCollapsed && scripts.length > 0} class:theme-light={theme === 'light'} onkeydown={handleKeyDown} onclick={closeContextMenu} tabindex="-1">
+<div class="app-container" class:sidebar-collapsed={sidebarCollapsed && scripts.length > 0} onkeydown={handleKeyDown} onclick={closeContextMenu} tabindex="-1">
   <div class="sidebar-wrapper" class:collapsed={sidebarCollapsed && scripts.length > 0}>
     <Sidebar
       connected={connected}
@@ -1303,7 +1309,7 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    background: rgba(10, 14, 20, 0.6);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     color: var(--text-secondary);
@@ -1335,7 +1341,7 @@
 
   .tab-switcher {
     display: flex;
-    background: rgba(10, 14, 20, 0.6);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     overflow: hidden;
@@ -1367,7 +1373,7 @@
   .status-bar {
     padding: 6px 16px;
     font-size: 12px;
-    background: rgba(10, 14, 20, 0.8);
+    background: var(--bg-input);
     border-bottom: 1px solid var(--border-color);
     color: var(--text-secondary);
     animation: slideIn 0.2s ease-out;
@@ -1537,7 +1543,7 @@
   .welcome-search-mode {
     display: flex;
     gap: 4px;
-    background: rgba(10, 14, 20, 0.6);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 3px;
@@ -1728,7 +1734,7 @@
   .recent-filter {
     width: 100%;
     padding: 6px 10px;
-    background: rgba(10, 14, 20, 0.6);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
@@ -1757,7 +1763,7 @@
 
   .context-menu {
     position: fixed;
-    background: rgba(10, 14, 20, 0.95);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 4px;
@@ -2066,7 +2072,7 @@
     align-items: center;
     gap: 4px;
     padding: 10px 6px;
-    background: rgba(10, 14, 20, 0.4);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     transition: var(--transition);
@@ -2110,7 +2116,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--overlay-bg);
     display: flex;
     align-items: center;
     justify-content: center;

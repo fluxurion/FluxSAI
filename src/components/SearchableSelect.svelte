@@ -161,7 +161,7 @@
     padding: 4px 8px;
     font-size: 13px;
     font-family: var(--font-family);
-    background: rgba(10, 14, 20, 0.6);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
@@ -217,7 +217,7 @@
     width: 100%;
     padding: 6px 10px;
     font-size: 13px;
-    background: rgba(10, 14, 20, 0.8);
+    background: var(--bg-input);
     border: none;
     border-bottom: 1px solid var(--border-color);
     border-radius: 0;

@@ -199,7 +199,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--overlay-bg);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -327,7 +327,7 @@
   }
 
   .sql-snippet {
-    background: rgba(10, 14, 20, 0.8);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 6px 10px;

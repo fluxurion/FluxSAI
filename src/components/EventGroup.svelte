@@ -670,7 +670,7 @@
   }
 
   .flags-toggle {
-    background: rgba(10, 14, 20, 0.6);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     color: var(--text-muted);
     padding: 4px 12px;

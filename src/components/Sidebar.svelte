@@ -201,7 +201,7 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: rgba(10, 14, 20, 0.6);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     color: var(--text-secondary);
@@ -289,7 +289,7 @@
   .save-mode-switcher {
     display: flex;
     gap: 4px;
-    background: rgba(10, 14, 20, 0.6);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 3px;

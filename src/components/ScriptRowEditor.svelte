@@ -362,7 +362,7 @@
   }
 
   .section-block {
-    background: rgba(10, 14, 20, 0.4);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 10px;
@@ -427,7 +427,7 @@
   }
 
   .flag-chip {
-    background: rgba(10, 14, 20, 0.6);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     color: var(--text-muted);
     padding: 2px 8px;
@@ -458,7 +458,7 @@
   }
 
   .sql-snippet {
-    background: rgba(10, 14, 20, 0.8);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 8px 12px;
