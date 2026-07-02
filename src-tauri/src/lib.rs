@@ -24,6 +24,7 @@ pub fn run() {
             db::insert_condition,
             db::delete_conditions_for_smart_event,
             db::parse_sql,
+            db::fetch_creature_template_info,
             sql_gen::export_scripts_sql,
             sql_gen::save_entry_to_file,
         ])

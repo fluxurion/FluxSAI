@@ -5,6 +5,7 @@
   import DbModal from './components/DbModal.svelte';
   import OptionsModal from './components/OptionsModal.svelte';
   import ImportModal from './components/ImportModal.svelte';
+  import ActionListModal from './components/ActionListModal.svelte';
   import type { SmartScriptRow, ConditionRow, DbConfig, NameSearchResult } from './lib/api';
   import * as api from './lib/api';
   import { createEmptyScriptRow, createEmptyConditionRow, SMART_SCRIPT_TYPES } from './lib/types';
@@ -138,6 +139,8 @@
   let connected = $state(false);
   let showDbModal = $state(false);
   let showOptionsModal = $state(false);
+  let showActionListModal = $state(false);
+  let actionListId = $state(0);
   let activeTab = $state<'editor' | 'sql'>('editor');
   let saveMode = $state<'manual' | 'auto'>(
     (localStorage.getItem('fluxsai_save_mode') as 'manual' | 'auto') ?? 'auto'
@@ -148,6 +151,8 @@
   let sidebarCollapsed = $state(false);
   let showClearModal = $state(false);
   let showNewScriptModal = $state(false);
+  let showAiWarningModal = $state(false);
+  let aiWarningInfo = $state<{ entry: number; name: string; ainame: string; scriptname: string } | null>(null);
   let newScriptEntry = $state('');
   let newScriptType = $state(0);
   let welcomeSearchEntry = $state('');
@@ -299,8 +304,26 @@
       }
       saveCachedScript(entry, sourceType, rows.length, rows, conditions, true);
       showStatus(`${tr('loaded')} ${rows.length} ${tr('scriptsForEntry')} ${entry}`, 'success');
+      if (sourceType === 0 && entry > 0) {
+        checkCreatureTemplateAi(entry);
+      }
     } catch (e: any) {
       showStatus(String(e), 'error');
+    }
+  }
+
+  async function checkCreatureTemplateAi(entry: number) {
+    try {
+      const info = await api.fetchCreatureTemplateInfo(entry);
+      if (!info) return;
+      const aiName = info.ainame?.trim() ?? '';
+      const scriptName = info.scriptname?.trim() ?? '';
+      if (aiName.toLowerCase() !== 'smartai' || scriptName !== '') {
+        aiWarningInfo = { entry: info.entry, name: info.name, ainame: aiName, scriptname: scriptName };
+        showAiWarningModal = true;
+      }
+    } catch {
+      // silently ignore — not all DBs may have creature_template
     }
   }
 
@@ -596,9 +619,8 @@
     }
     try {
       const sql = await api.exportScriptsSql(scripts, conditions);
-      const now = new Date();
-      const pad = (n: number) => String(n).padStart(2, '0');
-      const defaultName = `world_${now.getFullYear()}_${pad(now.getMonth() + 1)}_${pad(now.getDate())}_${pad(now.getHours())}_${currentSourceType}_${currentEntry}.sql`;
+      const sourcePrefix = currentSourceType === 0 ? 'creature' : currentSourceType === 1 ? 'gameobject' : currentSourceType === 2 ? 'areatrigger' : currentSourceType === 9 ? 'scene' : `source${currentSourceType}`;
+      const defaultName = `${sourcePrefix}_${currentEntry}_sai.sql`;
       const filePath = await save({
         defaultPath: defaultName,
         filters: [{ name: 'SQL files', extensions: ['sql'] }],
@@ -715,8 +737,10 @@
     if (e.key === 'Escape') {
       if (showDbModal) showDbModal = false;
       if (showOptionsModal) showOptionsModal = false;
+      if (showActionListModal) showActionListModal = false;
       if (showNewScriptModal) showNewScriptModal = false;
       if (showClearModal) showClearModal = false;
+      if (showAiWarningModal) showAiWarningModal = false;
       return;
     }
   }
@@ -766,9 +790,6 @@
       }
       if (row.event_chance < 0 || row.event_chance > 100) {
         errors.push(`Row ${row.id}: Event chance must be between 0-100`);
-      }
-      if (row.id === 0) {
-        errors.push(`Row has ID 0 (should be unique)`);
       }
     }
     
@@ -1168,6 +1189,7 @@
                   {saveMode}
                   {uiStyle}
                   {connected}
+                  onOpenActionList={(id: number) => { actionListId = id; showActionListModal = true; }}
                   expanded={defaultExpanded ? (expandedGroups.size === 0 || expandedGroups.has(`ev-${scripts[group.rows[0]]?.eventId ?? group.key}`)) : expandedGroups.has(`ev-${scripts[group.rows[0]]?.eventId ?? group.key}`)}
                 />
               {/each}
@@ -1194,6 +1216,9 @@
 {/if}
 {#if showImportModal}
   <ImportModal onImport={handleImport} onClose={() => showImportModal = false} {connected} {lang} />
+{/if}
+{#if showActionListModal}
+  <ActionListModal {actionListId} onClose={() => showActionListModal = false} {lang} {saveMode} {uiStyle} {connected} />
 {/if}
 
 {#if showNewScriptModal}
@@ -1255,6 +1280,42 @@
         </button>
         <button class="btn-ghost" onclick={() => showClearModal = false}>
           {tr('clearCancel')}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showAiWarningModal && aiWarningInfo}
+  <div class="modal-overlay" role="presentation" onclick={() => showAiWarningModal = false} onkeydown={(e) => e.key === 'Escape' && (showAiWarningModal = false)}>
+    <div class="ai-warning-modal glass-card" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+      <h3>⚠️ AI Configuration Warning</h3>
+      <p class="warning-creature">
+        <strong>{aiWarningInfo.name}</strong> (Entry: {aiWarningInfo.entry})
+      </p>
+      <div class="warning-details">
+        {#if aiWarningInfo.ainame.toLowerCase() !== 'smartai'}
+          <div class="warning-row">
+            <span class="warning-label">AIName:</span>
+            <span class="warning-value warning-bad">{aiWarningInfo.ainame || '(empty)'}</span>
+            <span class="warning-hint">→ should be "SmartAI" for SmartAI scripts to work</span>
+          </div>
+        {/if}
+        {#if aiWarningInfo.scriptname !== ''}
+          <div class="warning-row">
+            <span class="warning-label">ScriptName:</span>
+            <span class="warning-value warning-bad">{aiWarningInfo.scriptname}</span>
+            <span class="warning-hint">→ C++ script assigned, may conflict with SmartAI</span>
+          </div>
+        {/if}
+      </div>
+      <p class="warning-footer">
+        Smart scripts may not function correctly with this configuration.
+        Update <code>creature_template</code> to fix.
+      </p>
+      <div class="modal-actions">
+        <button class="btn-primary" onclick={() => showAiWarningModal = false}>
+          OK
         </button>
       </div>
     </div>
@@ -2150,5 +2211,83 @@
     flex-wrap: wrap;
     gap: 8px;
     justify-content: center;
+  }
+
+  .ai-warning-modal {
+    max-width: 460px;
+    padding: 24px;
+  }
+
+  .ai-warning-modal h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent-orange);
+    margin-bottom: 12px;
+  }
+
+  .warning-creature {
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-bottom: 14px;
+  }
+
+  .warning-details {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .warning-row {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .warning-label {
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.3px;
+    min-width: 80px;
+  }
+
+  .warning-value {
+    font-family: var(--font-mono);
+    font-weight: 600;
+  }
+
+  .warning-bad {
+    color: var(--accent-red);
+  }
+
+  .warning-hint {
+    color: var(--text-muted);
+    font-size: 12px;
+    width: 100%;
+    margin-left: 86px;
+  }
+
+  .warning-footer {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+
+  .warning-footer code {
+    font-family: var(--font-mono);
+    background: var(--bg-input);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 11px;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
   }
 </style>

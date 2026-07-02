@@ -90,6 +90,14 @@ pub struct TemplateEntry {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, FromRow)]
+pub struct CreatureTemplateInfo {
+    pub entry: u32,
+    pub name: String,
+    pub ainame: String,
+    pub scriptname: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, FromRow)]
 pub struct GuidRow {
     pub guid: u32,
 }
@@ -321,7 +329,21 @@ pub async fn insert_script(row: SmartScriptRow, state: tauri::State<'_, DbState>
          event_param_string, action_type, action_param1, action_param2, action_param3, action_param4, \
          action_param5, action_param6, target_type, target_param1, target_param2, target_param3, \
          target_x, target_y, target_z, target_o, comment) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
+         ON DUPLICATE KEY UPDATE \
+         link=VALUES(link), event_type=VALUES(event_type), event_phase_mask=VALUES(event_phase_mask), \
+         event_chance=VALUES(event_chance), event_flags=VALUES(event_flags), \
+         event_param1=VALUES(event_param1), event_param2=VALUES(event_param2), \
+         event_param3=VALUES(event_param3), event_param4=VALUES(event_param4), \
+         event_param5=VALUES(event_param5), event_param_string=VALUES(event_param_string), \
+         action_type=VALUES(action_type), action_param1=VALUES(action_param1), \
+         action_param2=VALUES(action_param2), action_param3=VALUES(action_param3), \
+         action_param4=VALUES(action_param4), action_param5=VALUES(action_param5), \
+         action_param6=VALUES(action_param6), target_type=VALUES(target_type), \
+         target_param1=VALUES(target_param1), target_param2=VALUES(target_param2), \
+         target_param3=VALUES(target_param3), target_x=VALUES(target_x), \
+         target_y=VALUES(target_y), target_z=VALUES(target_z), target_o=VALUES(target_o), \
+         comment=VALUES(comment)"
     )
     .bind(row.entryorguid)
     .bind(row.source_type)
@@ -645,3 +667,20 @@ fn parse_condition_insert(line: &str) -> Result<ConditionRow, String> {
     })
 }
 
+#[tauri::command]
+pub async fn fetch_creature_template_info(
+    entry: u32,
+    state: tauri::State<'_, DbState>,
+) -> Result<Option<CreatureTemplateInfo>, String> {
+    let pool = get_pool(&state)?;
+
+    let info: Option<CreatureTemplateInfo> = sqlx::query_as::<_, CreatureTemplateInfo>(
+        "SELECT entry, name, AIName as ainame, ScriptName as scriptname FROM creature_template WHERE entry = ?"
+    )
+    .bind(entry)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| format!("Query failed: {}", e))?;
+
+    Ok(info)
+}

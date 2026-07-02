@@ -32,6 +32,7 @@
     onDragOver,
     onDrop,
     onDragEnd,
+    onOpenActionList,
   } = $props();
 
   let showFlagsPopup = $state(false);
@@ -132,6 +133,22 @@
   function hasFlag(flag: number): boolean {
     return (group.eventFlags & flag) !== 0;
   }
+
+  let flagsPopupTop = $state(0);
+  let flagsPopupLeft = $state(0);
+
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return { destroy() { node.remove(); } };
+  }
+
+  function openFlagsPopup(e: MouseEvent) {
+    const btn = e.currentTarget as HTMLButtonElement;
+    const rect = btn.getBoundingClientRect();
+    flagsPopupTop = rect.bottom + 4;
+    flagsPopupLeft = rect.left;
+    showFlagsPopup = !showFlagsPopup;
+  }
 </script>
 
 <div 
@@ -213,11 +230,11 @@
             </label>
           {/if}
           <div class="flags-row">
-            <button class="flags-toggle" class:active={group.eventFlags > 0} onclick={() => showFlagsPopup = !showFlagsPopup}>
+            <button class="flags-toggle" class:active={group.eventFlags > 0} onclick={openFlagsPopup}>
               {tr('flags')}{#if group.eventFlags > 0} ({group.eventFlags}){/if}
             </button>
             {#if showFlagsPopup}
-              <div class="flags-popup">
+              <div class="flags-popup" style="top: {flagsPopupTop}px; left: {flagsPopupLeft}px;" use:portal>
                 {#each SMART_EVENT_FLAGS as f}
                   <button class="flag-tag" class:active={hasFlag(f.value)} onclick={() => toggleFlag(f.value)} title={getEventFlagTooltip(f.value) ?? f.comment}>{f.label}</button>
                 {/each}
@@ -294,11 +311,11 @@
                 <input class="pill-input" type="number" min="0" max="12" value={group.eventPhaseMask} onchange={(e) => setEventPhase(parseInt(e.currentTarget.value) || 0)} />
               </span>
               <span class="pill-sep">·</span>
-              <button class="flags-toggle" class:active={group.eventFlags > 0} onclick={() => showFlagsPopup = !showFlagsPopup}>
+              <button class="flags-toggle" class:active={group.eventFlags > 0} onclick={openFlagsPopup}>
                 {tr('flags')}{#if group.eventFlags > 0} ({group.eventFlags}){/if}
               </button>
               {#if showFlagsPopup}
-                <div class="flags-popup">
+                <div class="flags-popup" style="top: {flagsPopupTop}px; left: {flagsPopupLeft}px;" use:portal>
                   {#each SMART_EVENT_FLAGS as f}
                     <button class="flag-tag" class:active={hasFlag(f.value)} onclick={() => toggleFlag(f.value)} title={getEventFlagTooltip(f.value) ?? f.comment}>{f.label}</button>
                   {/each}
@@ -335,6 +352,7 @@
             {saveMode}
             {uiStyle}
             {connected}
+            onOpenActionList={onOpenActionList}
           />
         {/each}
         <button class="add-action-btn" onclick={() => onAddAction?.(group)}>
@@ -515,7 +533,7 @@
   }
 
   .pill-input {
-    width: 54px;
+    width: 80px;
     padding: 1px 4px;
     font-size: 13px;
     font-weight: 600;
@@ -692,10 +710,8 @@
   }
 
   .flags-popup {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    z-index: 50;
+    position: fixed;
+    z-index: 9999;
     display: flex;
     flex-wrap: wrap;
     gap: 3px;

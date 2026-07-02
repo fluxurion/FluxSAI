@@ -3,7 +3,7 @@
   import { SMART_ACTIONS, SMART_TARGETS } from '../lib/types';
   import { getActionParams, getTargetParams, getTargetHasCoords, getActionLabel, getTargetLabel, generateScriptComment } from '../lib/paramMeta';
   import { getActionTooltip, getTargetTooltip } from '../lib/tooltips';
-  import { t, type TranslationKey } from '../lib/i18n';
+  import { t, type TranslationKey, type Lang } from '../lib/i18n';
   import SearchableSelect from './SearchableSelect.svelte';
 
   let {
@@ -11,10 +11,11 @@
     onDelete,
     onDuplicate,
     onSave,
-    lang = 'en',
+    lang = 'en' as Lang,
     saveMode = 'manual' as 'manual' | 'auto',
     uiStyle = 'compact' as 'classic' | 'compact',
     connected = false,
+    onOpenActionList,
   } = $props();
 
   let actionParams = $derived(getActionParams(row.action_type));
@@ -87,12 +88,17 @@
   {#if uiStyle === 'compact'}
     <!-- ═══ COMPACT HEADER: selects + id + actions all in one bar ═══ -->
     <div class="compact-header">
-      <span class="header-id">[#{row.id}]</span>
+      <span class="header-id">#{row.id}</span>
       <SearchableSelect value={row.action_type} options={SMART_ACTIONS.map(a => ({ value: a.value, label: a.label, title: getActionTooltip(a.value) ?? '' }))} title={actionTooltip} onselect={(val) => row.action_type = val} />
       <span class="compact-arrow">➔</span>
       <SearchableSelect value={row.target_type} options={SMART_TARGETS.map(t2 => ({ value: t2.value, label: t2.label, title: getTargetTooltip(t2.value) ?? '' }))} title={targetTooltip} onselect={(val) => row.target_type = val} />
       {#if actionTooltip || targetTooltip}
         <span class="info-icon" title="{actionTooltip}{actionTooltip && targetTooltip ? ' → ' : ''}{targetTooltip}">ⓘ</span>
+      {/if}
+      {#if row.action_type === 80 && row.action_param1 > 0 && connected}
+        <button class="actionlist-open-btn" title={tr('viewActionlist')} onclick={() => onOpenActionList?.(row.action_param1)}>
+          📋 Actionlist #{row.action_param1}
+        </button>
       {/if}
       <div class="card-actions">
         <button class="icon-btn" title={tr('duplicate')} onclick={() => onDuplicate?.()}>D</button>
@@ -132,12 +138,17 @@
   {:else}
     <!-- ═══ CLASSIC HEADER ═══ -->
     <div class="card-header">
-      <span class="header-id">[#{row.id}]</span>
+      <span class="header-id">#{row.id}</span>
       <span class="header-link">LINK: <input type="number" min="0" bind:value={row.link} /></span>
       <span class="header-sep">|</span>
       <span class="header-action" title={actionTooltip}>{getActionLabel(row.action_type)}</span>
       <span class="header-arrow">➔</span>
       <span class="header-target" title={targetTooltip}>{getTargetLabel(row.target_type)}</span>
+      {#if row.action_type === 80 && row.action_param1 > 0 && connected}
+        <button class="actionlist-open-btn" title={tr('viewActionlist')} onclick={() => onOpenActionList?.(row.action_param1)}>
+          📋 Actionlist #{row.action_param1}
+        </button>
+      {/if}
       <div class="card-actions">
         <button class="icon-btn" title={tr('duplicate')} onclick={() => onDuplicate?.()}>D</button>
         <button class="icon-btn danger delete-btn" title={tr('delete')} onclick={() => onDelete?.()}>×</button>
@@ -221,9 +232,17 @@
   }
 
   .header-id {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background: rgba(188, 140, 255, 0.18);
+    border: 1px solid rgba(188, 140, 255, 0.35);
+    border-radius: 4px;
     font-weight: 700;
-    color: var(--text-muted);
+    color: var(--accent-purple);
     font-size: 12px;
+    letter-spacing: 0.4px;
+    flex-shrink: 0;
   }
 
   .header-link {
@@ -459,7 +478,7 @@
   }
 
   .pill-input {
-    width: 54px;
+    width: 80px;
     padding: 1px 4px;
     font-size: 13px;
     font-weight: 600;
@@ -484,4 +503,28 @@
   }
 
   .info-icon:hover { opacity: 1; }
+
+  .actionlist-open-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.15), rgba(88, 166, 255, 0.05));
+    border: 1px solid rgba(88, 166, 255, 0.35);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .actionlist-open-btn:hover {
+    color: var(--text-primary);
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.3), rgba(88, 166, 255, 0.15));
+    border-color: var(--accent-blue);
+    box-shadow: var(--glow-blue);
+  }
 </style>

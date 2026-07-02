@@ -170,6 +170,12 @@ export const translations = {
 
     // OptionsModal
     options: 'Options',
+
+    // ActionListModal
+    timedActionlist: 'Timed Actionlist',
+    noActionsInList: 'No actions in this actionlist.',
+    saveAll: 'Save All',
+    viewActionlist: 'View Actionlist',
   },
   hu: {
     // Sidebar
@@ -340,6 +346,12 @@ export const translations = {
     unsavedConditions: 'Mentetlen conditionök vannak. Biztosan bezárod?',
     confirmClose: 'Bezárás megerősítése',
     addAnotherCondition: 'Még Egy Feltétel Hozzáadása',
+
+    // ActionListModal
+    timedActionlist: 'Időzített Actionlist',
+    noActionsInList: 'Nincsenek actionök ebben az actionlistben.',
+    saveAll: 'Összes Mentése',
+    viewActionlist: 'Actionlist Megtekintése',
   },
 } as const;
 

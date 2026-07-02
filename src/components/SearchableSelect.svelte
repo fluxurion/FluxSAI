@@ -38,6 +38,7 @@
       search = '';
       highlightIdx = filtered.findIndex(o => o.value === value);
       if (highlightIdx < 0) highlightIdx = 0;
+      updateDropdownPosition();
       requestAnimationFrame(() => searchEl?.focus());
     }
   }
@@ -74,6 +75,29 @@
 
   let listEl = $state<HTMLDivElement | null>(null);
   let searchEl = $state<HTMLInputElement | null>(null);
+  let triggerEl = $state<HTMLButtonElement | null>(null);
+  let dropdownEl = $state<HTMLDivElement | null>(null);
+
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
+  }
+
+  let dropdownTop = $state(0);
+  let dropdownLeft = $state(0);
+  let dropdownWidth = $state(0);
+
+  function updateDropdownPosition() {
+    if (!triggerEl) return;
+    const rect = triggerEl.getBoundingClientRect();
+    dropdownTop = rect.bottom + 2;
+    dropdownLeft = rect.left;
+    dropdownWidth = Math.max(rect.width, 200);
+  }
 
   function scrollIntoView() {
     requestAnimationFrame(() => {
@@ -84,7 +108,7 @@
   }
 
   function handleClickOutside(e: MouseEvent) {
-    if (open && containerEl && !containerEl.contains(e.target as Node)) {
+    if (open && containerEl && !containerEl.contains(e.target as Node) && !dropdownEl?.contains(e.target as Node)) {
       close();
     }
   }
@@ -107,13 +131,14 @@
     onclick={toggle}
     {title}
     type="button"
+    bind:this={triggerEl}
   >
     <span class="ss-value">{value}: {selectedLabel}</span>
     <span class="ss-arrow" class:open>▾</span>
   </button>
 
   {#if open}
-    <div class="ss-dropdown" role="listbox">
+    <div class="ss-dropdown" style="top: {dropdownTop}px; left: {dropdownLeft}px; width: {dropdownWidth}px;" role="listbox" bind:this={dropdownEl} use:portal>
       <input
         class="ss-search"
         type="text"
@@ -200,17 +225,13 @@
   }
 
   .ss-dropdown {
-    position: absolute;
-    top: calc(100% + 2px);
-    left: 0;
-    right: 0;
+    position: fixed;
     z-index: 9999;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-pop);
     overflow: hidden;
-    min-width: 200px;
   }
 
   .ss-search {

@@ -1,12 +1,15 @@
 <script lang="ts">
   import type { SmartScriptRow, ConditionRow } from '../lib/api';
-  import { generateInsertSQL, generateDeleteSQL, generateConditionInsertSQL } from '../lib/types';
+  import { generateInsertSQL, generateDeleteSQL, generateConditionInsertSQL, generateUpdateCreatureTemplateSQL } from '../lib/types';
 
   let { rows = $bindable([]), conditions = [] as ConditionRow[], onExport } = $props();
 
   let copied = $state(false);
 
   let fullSql = $derived(
+    rows.length === 0 ? '' :
+    generateDeleteSQL(rows[0].entryorguid, rows[0].source_type) + '\n\n' +
+    (generateUpdateCreatureTemplateSQL(rows[0].entryorguid, rows[0].source_type) ? generateUpdateCreatureTemplateSQL(rows[0].entryorguid, rows[0].source_type) + '\n\n' : '') +
     rows.map(r => generateInsertSQL(r)).join('\n\n') +
     (conditions.length > 0
       ? '\n\n-- Conditions\n' + conditions.map(c => generateConditionInsertSQL(c)).join('\n\n')

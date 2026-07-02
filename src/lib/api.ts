@@ -124,3 +124,14 @@ export async function saveEntryToFile(rows: SmartScriptRow[], conditions: Condit
 export async function exportScriptsSql(rows: SmartScriptRow[], conditions: ConditionRow[] = []): Promise<string> {
   return invoke('export_scripts_sql', { rows, conditions });
 }
+
+export interface CreatureTemplateInfo {
+  entry: number;
+  name: string;
+  ainame: string;
+  scriptname: string;
+}
+
+export async function fetchCreatureTemplateInfo(entry: number): Promise<CreatureTemplateInfo | null> {
+  return invoke('fetch_creature_template_info', { entry });
+}

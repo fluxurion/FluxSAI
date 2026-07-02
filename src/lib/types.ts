@@ -634,3 +634,13 @@ export function generateConditionDescription(cond: ConditionRow): string {
 export function generateDeleteSQL(entryorguid: number, source_type: number): string {
   return `DELETE FROM \`smart_scripts\` WHERE \`entryorguid\` = ${entryorguid} AND \`source_type\` = ${source_type};`;
 }
+
+export function generateUpdateCreatureTemplateSQL(entryorguid: number, source_type: number): string {
+  if (source_type === 0 && entryorguid > 0) {
+    return `UPDATE \`creature_template\` SET \`AIName\` = 'SmartAI' WHERE \`entry\` = ${entryorguid};`;
+  }
+  if (source_type === 1 && entryorguid > 0) {
+    return `UPDATE \`gameobject_template\` SET \`AIName\` = 'SmartGameObjectAI' WHERE \`entry\` = ${entryorguid};`;
+  }
+  return '';
+}
