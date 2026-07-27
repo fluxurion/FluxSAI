@@ -8,8 +8,8 @@ export interface ParamDef {
 function parseParamLabels(comment: string | undefined): string[] {
   if (!comment) return [];
   const trimmed = comment.trim();
-  if (!trimmed || trimmed.toUpperCase() === 'NONE' || trimmed === '' || trimmed.startsWith('WARNING') || trimmed.startsWith('LEGACY') || trimmed.startsWith('Ashamane')) {
-    if (trimmed.startsWith('Ashamane')) {
+  if (!trimmed || trimmed.toUpperCase() === 'NONE' || trimmed === '' || trimmed.startsWith('WARNING') || trimmed.startsWith('LEGACY') || trimmed.startsWith('Ashamane') || trimmed.startsWith('BfaCore')) {
+    if (trimmed.startsWith('Ashamane') || trimmed.startsWith('BfaCore')) {
       const after = trimmed.substring(trimmed.indexOf(':') + 1).trim();
       if (after) return after.split(',').map(s => s.trim()).filter(s => s && s.toUpperCase() !== 'NONE');
     }
