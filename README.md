@@ -2,6 +2,13 @@
 
 A desktop application for editing TrinityCore SmartAI / SmartScripts, built with Tauri 2, Svelte 5, and TypeScript.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Welcome Screen](Screenshots/1.png) | ![Script Editor — Classic Mode](Screenshots/2.png) |
+| ![Script Editor — Compact Mode](Screenshots/3.png) | ![Conditions Editor](Screenshots/4.png) |
+
 ## Features
 
 - **Visual SmartAI Editor** — Create and edit SmartScripts with an intuitive card-based UI
