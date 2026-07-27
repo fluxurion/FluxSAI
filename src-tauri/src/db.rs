@@ -232,7 +232,7 @@ pub async fn search_scripts_by_name(
 
     // Step 1: Find template entries matching the name
     let entries_sql = format!(
-        "SELECT entry, name FROM {} WHERE name LIKE ? ORDER BY entry LIMIT 100",
+        "SELECT CAST(entry AS SIGNED) as entry, name FROM {} WHERE name LIKE ? ORDER BY entry LIMIT 100",
         template_table
     );
     let entries: Vec<TemplateEntry> = sqlx::query_as::<_, TemplateEntry>(&entries_sql)
@@ -377,7 +377,7 @@ pub async fn search_scripts_by_action_or_event(
         if !positive.is_empty() {
             let placeholders = positive.iter().map(|_| "?").collect::<Vec<_>>().join(",");
             let sql = format!(
-                "SELECT entry, name FROM {} WHERE entry IN ({})",
+                "SELECT CAST(entry AS SIGNED) as entry, name FROM {} WHERE entry IN ({})",
                 template_table, placeholders
             );
             let mut q = sqlx::query_as::<_, TemplateEntry>(&sql);
@@ -396,7 +396,7 @@ pub async fn search_scripts_by_action_or_event(
         if !guids.is_empty() {
             let placeholders = guids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
             let sql = format!(
-                "SELECT DISTINCT t.entry, t.name FROM {} t JOIN {} i ON i.id = t.entry WHERE i.guid IN ({})",
+                "SELECT DISTINCT CAST(t.entry AS SIGNED) as entry, t.name FROM {} t JOIN {} i ON i.id = t.entry WHERE i.guid IN ({})",
                 template_table, instance_table, placeholders
             );
             let mut q = sqlx::query_as::<_, TemplateEntry>(&sql);
