@@ -8,7 +8,7 @@
   import ActionListModal from './components/ActionListModal.svelte';
   import type { SmartScriptRow, ConditionRow, DbConfig, NameSearchResult } from './lib/api';
   import * as api from './lib/api';
-  import { createEmptyScriptRow, createEmptyConditionRow, SMART_SCRIPT_TYPES } from './lib/types';
+  import { createEmptyScriptRow, createEmptyConditionRow, SMART_SCRIPT_TYPES, SMART_EVENTS, SMART_ACTIONS } from './lib/types';
   import { groupByEvent, getEventLabel, getActionLabel, type EventGroup as EventGroupData, generateScriptComment } from './lib/paramMeta';
   import { getStoredLang, storeLang, t, type Lang, type TranslationKey } from './lib/i18n';
   import { save } from '@tauri-apps/plugin-dialog';
@@ -157,12 +157,13 @@
   let newScriptType = $state(0);
   let welcomeSearchEntry = $state('');
   let welcomeSearchName = $state('');
-  let welcomeSearchMode = $state<'entry' | 'name'>('entry');
+  let welcomeSearchMode = $state<'entry' | 'name' | 'action' | 'event'>('entry');
   let expandedGroups = $state<Set<string>>(new Set());
   let defaultExpanded = $state(true);
   let nameSearchResult = $state<NameSearchResult | null>(null);
   let nameSearchPage = $state(0);
   let welcomeSearchType = $state(0);
+  let welcomeSearchActionEventValue = $state(0);
   let currentEntry = $state(0);
   let currentSourceType = $state(0);
   let currentIsOnline = $state(false);
@@ -340,6 +341,27 @@
       }
       nameSearchResult = result;
       nameSearchPage = 0;
+      loadNameSearchPage(result, 0, sourceType);
+      showStatus(`${tr('nameSearchFound')} ${result.entries.length} ${tr('nameSearchEntries')}, ${result.scripts.length} ${tr('nameSearchScripts')}`, 'success');
+    } catch (e: any) {
+      showStatus(String(e), 'error');
+    }
+  }
+
+  async function handleActionEventSearch(searchField: 'action' | 'event', value: number, sourceType: number) {
+    if (!connected) {
+      showStatus(tr('notConnected'), 'error');
+      return;
+    }
+    try {
+      const result = await api.searchScriptsByActionOrEvent(searchField, value, sourceType);
+      if (result.scripts.length === 0) {
+        showStatus(`${tr('nameSearchNoResults')}`, 'error');
+        return;
+      }
+      nameSearchResult = result;
+      nameSearchPage = 0;
+      currentSourceType = sourceType;
       loadNameSearchPage(result, 0, sourceType);
       showStatus(`${tr('nameSearchFound')} ${result.entries.length} ${tr('nameSearchEntries')}, ${result.scripts.length} ${tr('nameSearchScripts')}`, 'success');
     } catch (e: any) {
@@ -678,6 +700,10 @@
       }
       return;
     }
+    if (welcomeSearchMode === 'action' || welcomeSearchMode === 'event') {
+      handleActionEventSearch(welcomeSearchMode, welcomeSearchActionEventValue, welcomeSearchType);
+      return;
+    }
     const entry = parseInt(welcomeSearchEntry);
     if (!isNaN(entry)) {
       handleSearch(entry, welcomeSearchType);
@@ -935,6 +961,7 @@
       onConnectClick={() => showDbModal = true}
       onSearch={handleSearch}
       onNameSearch={handleNameSearch}
+      onActionEventSearch={handleActionEventSearch}
       onNew={handleAddRow}
       {lang}
       onOptions={() => showOptionsModal = true}
@@ -1022,6 +1049,8 @@
                 <div class="welcome-search-mode">
                   <button class="save-mode-btn" class:active={welcomeSearchMode === 'entry'} onclick={() => welcomeSearchMode = 'entry'}>{tr('entryGuid')}</button>
                   <button class="save-mode-btn" class:active={welcomeSearchMode === 'name'} onclick={() => welcomeSearchMode = 'name'}>{tr('searchByName')}</button>
+                  <button class="save-mode-btn" class:active={welcomeSearchMode === 'action'} onclick={() => welcomeSearchMode = 'action'}>{tr('searchByAction')}</button>
+                  <button class="save-mode-btn" class:active={welcomeSearchMode === 'event'} onclick={() => welcomeSearchMode = 'event'}>{tr('searchByEvent')}</button>
                 </div>
                 {#if welcomeSearchMode === 'entry'}
                   <input
@@ -1037,7 +1066,7 @@
                       <option value={st.value}>{st.label}</option>
                     {/each}
                   </select>
-                {:else}
+                {:else if welcomeSearchMode === 'name'}
                   <input
                     type="text"
                     class="welcome-search-input"
@@ -1048,6 +1077,17 @@
                   />
                   <select bind:value={welcomeSearchType} disabled={!connected}>
                     {#each SMART_SCRIPT_TYPES.filter(st => st.value === 0 || st.value === 1) as st}
+                      <option value={st.value}>{st.label}</option>
+                    {/each}
+                  </select>
+                {:else}
+                  <select bind:value={welcomeSearchActionEventValue} disabled={!connected}>
+                    {#each (welcomeSearchMode === 'action' ? SMART_ACTIONS : SMART_EVENTS) as opt}
+                      <option value={opt.value}>{opt.value}: {opt.label}</option>
+                    {/each}
+                  </select>
+                  <select bind:value={welcomeSearchType} disabled={!connected}>
+                    {#each SMART_SCRIPT_TYPES as st}
                       <option value={st.value}>{st.label}</option>
                     {/each}
                   </select>
@@ -1603,7 +1643,8 @@
   }
 
   .welcome-search-mode {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 4px;
     background: var(--bg-input);
     border: 1px solid var(--border-color);
@@ -1612,11 +1653,10 @@
   }
 
   .welcome-search-mode .save-mode-btn {
-    flex: 1;
     background: transparent;
     color: var(--text-muted);
-    padding: 5px 10px;
-    font-size: 12px;
+    padding: 5px 8px;
+    font-size: 11px;
     font-weight: 600;
     border-radius: 4px;
     transition: var(--transition);

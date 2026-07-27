@@ -85,7 +85,7 @@ pub struct ConditionRow {
 
 #[derive(Serialize, Deserialize, Debug, Clone, FromRow)]
 pub struct TemplateEntry {
-    pub entry: u32,
+    pub entry: i64,
     pub name: String,
 }
 
@@ -245,7 +245,7 @@ pub async fn search_scripts_by_name(
         return Ok(NameSearchResult { entries: vec![], scripts: vec![] });
     }
 
-    let entry_ids: Vec<u32> = entries.iter().map(|e| e.entry).collect();
+    let entry_ids: Vec<i64> = entries.iter().map(|e| e.entry).collect();
     let placeholders = entry_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
 
     // Step 2: Search smart_scripts for positive entryorguid = entry
@@ -260,7 +260,7 @@ pub async fn search_scripts_by_name(
 
     let mut q = sqlx::query_as::<_, SmartScriptRow>(&scripts_sql);
     for id in &entry_ids {
-        q = q.bind(*id as i64);
+        q = q.bind(*id);
     }
     q = q.bind(source_type);
 
@@ -281,7 +281,7 @@ pub async fn search_scripts_by_name(
 
     let mut gq = sqlx::query_as::<_, GuidRow>(&guid_sql);
     for id in &entry_ids {
-        gq = gq.bind(*id);
+        gq = gq.bind(*id as u32);
     }
 
     let guids: Vec<GuidRow> = gq
@@ -317,6 +317,113 @@ pub async fn search_scripts_by_name(
         .map_err(|e| format!("Query failed: {}", e))?;
 
     Ok(NameSearchResult { entries, scripts: guid_scripts })
+}
+
+#[tauri::command]
+pub async fn search_scripts_by_action_or_event(
+    search_field: String,
+    value: u8,
+    source_type: u8,
+    state: tauri::State<'_, DbState>,
+) -> Result<NameSearchResult, String> {
+    let pool = get_pool(&state)?;
+
+    let column = match search_field.as_str() {
+        "action" => "action_type",
+        "event" => "event_type",
+        _ => return Err("Invalid search field. Use 'action' or 'event'.".to_string()),
+    };
+
+    let scripts_sql = format!(
+        "SELECT entryorguid, source_type, id, link, event_type, event_phase_mask, event_chance, event_flags, \
+         event_param1, event_param2, event_param3, event_param4, event_param5, event_param_string, \
+         action_type, action_param1, action_param2, action_param3, action_param4, action_param5, action_param6, \
+         target_type, target_param1, target_param2, target_param3, target_x, target_y, target_z, target_o, comment \
+         FROM smart_scripts WHERE {} = ? AND source_type = ? ORDER BY entryorguid, id LIMIT 500",
+        column
+    );
+
+    let scripts: Vec<SmartScriptRow> = sqlx::query_as::<_, SmartScriptRow>(&scripts_sql)
+        .bind(value)
+        .bind(source_type)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| format!("Query failed: {}", e))?;
+
+    if scripts.is_empty() {
+        return Ok(NameSearchResult { entries: vec![], scripts: vec![] });
+    }
+
+    // Collect distinct entryorguid values in order
+    let mut entry_set: Vec<i64> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for s in &scripts {
+        if seen.insert(s.entryorguid) {
+            entry_set.push(s.entryorguid);
+        }
+    }
+
+    let mut entries: Vec<TemplateEntry> = Vec::new();
+
+    let (template_table, instance_table) = match source_type {
+        0 => (Some("creature_template"), Some("creature")),
+        1 => (Some("gameobject_template"), Some("gameobject")),
+        _ => (None, None),
+    };
+
+    if let (Some(template_table), Some(instance_table)) = (template_table, instance_table) {
+        // Resolve positive entries directly from template table
+        let positive: Vec<i64> = entry_set.iter().filter(|e| **e >= 0).copied().collect();
+        if !positive.is_empty() {
+            let placeholders = positive.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT entry, name FROM {} WHERE entry IN ({})",
+                template_table, placeholders
+            );
+            let mut q = sqlx::query_as::<_, TemplateEntry>(&sql);
+            for e in &positive {
+                q = q.bind(*e as u32);
+            }
+            let found: Vec<TemplateEntry> = q
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| format!("Query failed: {}", e))?;
+            entries.extend(found);
+        }
+
+        // Resolve negative entries (guids) through instance table → template table
+        let guids: Vec<u32> = entry_set.iter().filter(|e| **e < 0).map(|e| (-e) as u32).collect();
+        if !guids.is_empty() {
+            let placeholders = guids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT DISTINCT t.entry, t.name FROM {} t JOIN {} i ON i.id = t.entry WHERE i.guid IN ({})",
+                template_table, instance_table, placeholders
+            );
+            let mut q = sqlx::query_as::<_, TemplateEntry>(&sql);
+            for g in &guids {
+                q = q.bind(*g);
+            }
+            let found: Vec<TemplateEntry> = q
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| format!("Query failed: {}", e))?;
+            // Store with negative entry (matching entryorguid) so pager can find them
+            for mut f in found {
+                f.entry = -f.entry;
+                entries.push(f);
+            }
+        }
+    }
+
+    // For any entries not resolved, add with entryorguid as name
+    let resolved: std::collections::HashSet<i64> = entries.iter().map(|e| e.entry).collect();
+    for e in &entry_set {
+        if !resolved.contains(e) {
+            entries.push(TemplateEntry { entry: *e, name: e.to_string() });
+        }
+    }
+
+    Ok(NameSearchResult { entries, scripts })
 }
 
 #[tauri::command]

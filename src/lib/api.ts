@@ -93,6 +93,14 @@ export async function searchScriptsByName(name: string, sourceType: number): Pro
   return invoke('search_scripts_by_name', { name, sourceType });
 }
 
+export async function searchScriptsByActionOrEvent(
+  searchField: 'action' | 'event',
+  value: number,
+  sourceType: number,
+): Promise<NameSearchResult> {
+  return invoke('search_scripts_by_action_or_event', { searchField, value, sourceType });
+}
+
 export async function insertScript(row: SmartScriptRow): Promise<string> {
   return invoke('insert_script', { row });
 }

@@ -17,6 +17,7 @@ pub fn run() {
             db::fetch_scripts,
             db::fetch_script_by_entry,
             db::search_scripts_by_name,
+            db::search_scripts_by_action_or_event,
             db::insert_script,
             db::delete_script,
             db::fetch_conditions,

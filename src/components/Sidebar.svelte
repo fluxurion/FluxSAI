@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { SMART_SCRIPT_TYPES } from '../lib/types';
+  import { SMART_SCRIPT_TYPES, SMART_EVENTS, SMART_ACTIONS } from '../lib/types';
   import { t, type Lang, type TranslationKey } from '../lib/i18n';
 
-  let { entryorguid = $bindable(0), sourceType = $bindable(0), onSearch, onNameSearch, onNew, connected = false, onConnectClick, lang = 'en' as Lang, onOptions, onCollapse } = $props();
+  let { entryorguid = $bindable(0), sourceType = $bindable(0), onSearch, onNameSearch, onActionEventSearch, onNew, connected = false, onConnectClick, lang = 'en' as Lang, onOptions, onCollapse } = $props();
 
   let searchEntry = $state('');
   let searchName = $state('');
   let searchType = $state(0);
-  let searchMode = $state<'entry' | 'name'>('entry');
+  let searchMode = $state<'entry' | 'name' | 'action' | 'event'>('entry');
+  let searchActionEventValue = $state(0);
 
   const NAME_SEARCH_TYPES = SMART_SCRIPT_TYPES.filter(t2 => t2.value === 0 || t2.value === 1);
 
@@ -34,6 +35,11 @@
         sourceType = searchType;
         onNameSearch?.(searchName.trim(), searchType);
       }
+      return;
+    }
+    if (searchMode === 'action' || searchMode === 'event') {
+      sourceType = searchType;
+      onActionEventSearch?.(searchMode, searchActionEventValue, searchType);
       return;
     }
     const entry = parseInt(searchEntry);
@@ -79,9 +85,11 @@
 
   <div class="sidebar-section">
     <div class="section-title">{tr('searchScripts')}</div>
-    <div class="save-mode-switcher">
+    <div class="search-mode-switcher">
       <button class="save-mode-btn" class:active={searchMode === 'entry'} onclick={() => searchMode = 'entry'}>{tr('entryGuid')}</button>
       <button class="save-mode-btn" class:active={searchMode === 'name'} onclick={() => searchMode = 'name'}>{tr('searchByName')}</button>
+      <button class="save-mode-btn" class:active={searchMode === 'action'} onclick={() => searchMode = 'action'}>{tr('searchByAction')}</button>
+      <button class="save-mode-btn" class:active={searchMode === 'event'} onclick={() => searchMode = 'event'}>{tr('searchByEvent')}</button>
     </div>
     {#if searchMode === 'entry'}
       <div class="search-row">
@@ -99,7 +107,7 @@
           {/each}
         </select>
       </div>
-    {:else}
+    {:else if searchMode === 'name'}
       <div class="search-row">
         <input
           type="text"
@@ -111,6 +119,21 @@
       <div class="search-row">
         <select bind:value={searchType}>
           {#each NAME_SEARCH_TYPES as t2}
+            <option value={t2.value}>{t2.label}</option>
+          {/each}
+        </select>
+      </div>
+    {:else}
+      <div class="search-row">
+        <select bind:value={searchActionEventValue}>
+          {#each (searchMode === 'action' ? SMART_ACTIONS : SMART_EVENTS) as opt}
+            <option value={opt.value}>{opt.value}: {opt.label}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="search-row">
+        <select bind:value={searchType}>
+          {#each SMART_SCRIPT_TYPES as t2}
             <option value={t2.value}>{t2.label}</option>
           {/each}
         </select>
@@ -298,8 +321,9 @@
     transform: translateY(-1px);
   }
 
-  .save-mode-switcher {
-    display: flex;
+  .search-mode-switcher {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 4px;
     background: var(--bg-input);
     border: 1px solid var(--border-color);
@@ -308,11 +332,10 @@
   }
 
   .save-mode-btn {
-    flex: 1;
     background: transparent;
     color: var(--text-muted);
-    padding: 5px 10px;
-    font-size: 12px;
+    padding: 5px 8px;
+    font-size: 11px;
     font-weight: 600;
     border-radius: 4px;
     transition: var(--transition);
