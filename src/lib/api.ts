@@ -136,8 +136,8 @@ export async function exportScriptsSql(rows: SmartScriptRow[], conditions: Condi
 export interface CreatureTemplateInfo {
   entry: number;
   name: string;
-  ainame: string;
-  scriptname: string;
+  ainame: string | null;
+  scriptname: string | null;
 }
 
 export async function fetchCreatureTemplateInfo(entry: number): Promise<CreatureTemplateInfo | null> {

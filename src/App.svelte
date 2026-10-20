@@ -154,6 +154,7 @@
   let showAiWarningModal = $state(false);
   let aiWarningInfo = $state<{ entry: number; name: string; ainame: string; scriptname: string } | null>(null);
   let newScriptEntry = $state('');
+  let dismissedAiWarnings = $state<Set<number>>(new Set());
   let newScriptType = $state(0);
   let welcomeSearchEntry = $state('');
   let welcomeSearchName = $state('');
@@ -314,18 +315,28 @@
   }
 
   async function checkCreatureTemplateAi(entry: number) {
+    if (dismissedAiWarnings.has(entry)) return;
     try {
       const info = await api.fetchCreatureTemplateInfo(entry);
       if (!info) return;
-      const aiName = info.ainame?.trim() ?? '';
-      const scriptName = info.scriptname?.trim() ?? '';
-      if (aiName.toLowerCase() !== 'smartai' || scriptName !== '') {
+      const aiName = (info.ainame ?? '').trim();
+      const scriptName = (info.scriptname ?? '').trim();
+      if (aiName.toLowerCase() !== 'smartai') {
         aiWarningInfo = { entry: info.entry, name: info.name, ainame: aiName, scriptname: scriptName };
         showAiWarningModal = true;
+      } else if (scriptName !== '') {
+        showStatus(`${info.name} (Entry: ${info.entry}) has ScriptName "${scriptName}" which may conflict with SmartAI`, 'info');
       }
     } catch {
       // silently ignore — not all DBs may have creature_template
     }
+  }
+
+  function dismissAiWarning() {
+    if (aiWarningInfo) {
+      dismissedAiWarnings.add(aiWarningInfo.entry);
+    }
+    showAiWarningModal = false;
   }
 
   async function handleNameSearch(name: string, sourceType: number) {
@@ -1327,7 +1338,7 @@
 {/if}
 
 {#if showAiWarningModal && aiWarningInfo}
-  <div class="modal-overlay" role="presentation" onclick={() => showAiWarningModal = false} onkeydown={(e) => e.key === 'Escape' && (showAiWarningModal = false)}>
+  <div class="modal-overlay" role="presentation" onclick={dismissAiWarning} onkeydown={(e) => e.key === 'Escape' && dismissAiWarning()}>
     <div class="ai-warning-modal glass-card" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <h3>⚠️ AI Configuration Warning</h3>
       <p class="warning-creature">
@@ -1354,7 +1365,10 @@
         Update <code>creature_template</code> to fix.
       </p>
       <div class="modal-actions">
-        <button class="btn-primary" onclick={() => showAiWarningModal = false}>
+        <button class="btn-ghost" onclick={dismissAiWarning}>
+          Continue editing
+        </button>
+        <button class="btn-primary" onclick={dismissAiWarning}>
           OK
         </button>
       </div>
